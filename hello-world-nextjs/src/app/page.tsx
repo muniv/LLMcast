@@ -4,16 +4,23 @@ import { useState, useEffect } from 'react'
 
 export default function Home() {
   const [currentTime, setCurrentTime] = useState('')
-  const [message, setMessage] = useState('')
-  const [chatInput, setChatInput] = useState('')
-  const [chatResponse, setChatResponse] = useState('')
-  const [isLoading, setIsLoading] = useState(false)
+  const [mounted, setMounted] = useState(false)
+  const [showDataModal, setShowDataModal] = useState(false)
+  const [csvData, setCsvData] = useState<any>(null)
+  const [isLoadingData, setIsLoadingData] = useState(false)
+  const [showForecastModal, setShowForecastModal] = useState(false)
+  const [forecastData, setForecastData] = useState<any>(null)
+  const [isLoadingForecast, setIsLoadingForecast] = useState(false)
+  const [targetColumn, setTargetColumn] = useState('')
+  const [featureColumns, setFeatureColumns] = useState<string[]>([])
+  const [forecastDays, setForecastDays] = useState(7)
 
   useEffect(() => {
+    setMounted(true)
+    
     const updateTime = () => {
       const now = new Date()
       const timeString = now.toLocaleString('ko-KR', {
-        timeZone: 'Asia/Seoul',
         year: 'numeric',
         month: '2-digit',
         day: '2-digit',
@@ -30,153 +37,340 @@ export default function Home() {
     return () => clearInterval(interval)
   }, [])
 
-  const showMessage = () => {
-    alert('안녕하세요! Next.js + Vercel 배포가 성공적으로 완료되었습니다! 🎊')
-  }
-
-  const testAPI = async () => {
+  const loadDataPreview = async () => {
+    setIsLoadingData(true)
+    
     try {
-      const response = await fetch('/api/hello')
+      const response = await fetch('/api/data')
       const data = await response.json()
-      setMessage(data.message)
+      
+      if (data.success) {
+        setCsvData(data)
+        setShowDataModal(true)
+      } else {
+        alert(`데이터 로드 오류: ${data.error}`)
+      }
     } catch {
-      setMessage('API 호출 실패')
+      alert('데이터를 불러오는 중 오류가 발생했습니다.')
+    } finally {
+      setIsLoadingData(false)
     }
   }
 
-  const testChatGPT = async () => {
-    if (!chatInput.trim()) {
-      setChatResponse('메시지를 입력해주세요!')
+  const runForecast = async () => {
+    if (!targetColumn) {
+      alert('예측 타겟 컬럼을 선택해주세요.')
+      return
+    }
+    if (featureColumns.length === 0) {
+      alert('피쳐 컬럼을 최소 1개 이상 선택해주세요.')
+      return
+    }
+    if (forecastDays < 1 || forecastDays > 30) {
+      alert('예측 기간은 1일에서 30일 사이로 입력해주세요.')
       return
     }
 
-    setIsLoading(true)
-    setChatResponse('ChatGPT가 생각 중입니다...')
-
+    setIsLoadingForecast(true)
+    
     try {
-      const response = await fetch('/api/chat', {
+      const response = await fetch('/api/forecast', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ message: chatInput }),
+        body: JSON.stringify({
+          targetColumn,
+          featureColumns,
+          forecastDays
+        }),
       })
 
       const data = await response.json()
-
+      
       if (data.success) {
-        setChatResponse(data.message)
+        setForecastData(data)
+        setShowForecastModal(true)
       } else {
-        setChatResponse(`오류: ${data.error} - ${data.message}`)
+        alert(`예측 오류: ${data.error}`)
       }
     } catch {
-      setChatResponse('ChatGPT API 호출 실패')
+      alert('수요예측 실행 중 오류가 발생했습니다.')
     } finally {
-      setIsLoading(false)
+      setIsLoadingForecast(false)
+    }
+  }
+
+  const handleFeatureColumnChange = (column: string, checked: boolean) => {
+    if (checked) {
+      setFeatureColumns([...featureColumns, column])
+    } else {
+      setFeatureColumns(featureColumns.filter(col => col !== column))
     }
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-600 to-purple-900 flex items-center justify-center p-4">
-      <div className="text-center bg-white bg-opacity-10 p-12 rounded-3xl backdrop-blur-lg shadow-2xl border border-white border-opacity-20 max-w-lg w-full">
-        <div className="text-6xl mb-6 animate-bounce">🚀</div>
-        
-        <h1 className="text-5xl font-bold text-white mb-6 animate-fade-in-up">
-          Hello World!
-        </h1>
-        
-        <p className="text-xl text-white text-opacity-90 mb-8 animate-fade-in-up-delay">
-          Next.js + Vercel 배포 성공! 🎉
-        </p>
-        
-        <div className="space-y-4 mb-8">
-          <button
-            onClick={showMessage}
-            className="bg-white bg-opacity-20 border-2 border-white border-opacity-30 text-white px-8 py-3 rounded-full text-lg transition-all duration-300 hover:bg-opacity-30 hover:transform hover:-translate-y-1 hover:shadow-lg animate-fade-in-up-delay-2 block w-full"
-          >
-            클릭해보세요!
-          </button>
-          
-          <button
-            onClick={testAPI}
-            className="bg-green-500 bg-opacity-20 border-2 border-green-400 border-opacity-50 text-white px-8 py-3 rounded-full text-lg transition-all duration-300 hover:bg-opacity-30 hover:transform hover:-translate-y-1 hover:shadow-lg block w-full"
-          >
-            API 테스트
-          </button>
-        </div>
-        
-        {/* ChatGPT 테스트 섹션 */}
-        <div className="space-y-4 mb-8 p-4 bg-blue-500 bg-opacity-20 rounded-lg border border-blue-400 border-opacity-30">
-          <h3 className="text-xl font-bold text-white mb-4">🤖 ChatGPT 테스트</h3>
-          
-          <input
-            type="text"
-            value={chatInput}
-            onChange={(e) => setChatInput(e.target.value)}
-            placeholder="ChatGPT에게 질문해보세요..."
-            className="w-full px-4 py-3 rounded-lg bg-gray-800 bg-opacity-80 border border-blue-400 border-opacity-50 text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-300"
-            onKeyPress={(e) => e.key === 'Enter' && !isLoading && testChatGPT()}
-          />
-          
-          <button
-            onClick={testChatGPT}
-            disabled={isLoading}
-            className={`w-full px-8 py-3 rounded-full text-lg transition-all duration-300 ${
-              isLoading 
-                ? 'bg-gray-500 bg-opacity-50 cursor-not-allowed' 
-                : 'bg-blue-500 bg-opacity-30 border-2 border-blue-400 border-opacity-50 hover:bg-opacity-40 hover:transform hover:-translate-y-1 hover:shadow-lg'
-            } text-white`}
-          >
-            {isLoading ? '생각 중...' : 'ChatGPT에게 질문하기'}
-          </button>
-        </div>
-        
-        {message && (
-          <div className="mb-4 p-3 bg-green-500 bg-opacity-20 rounded-lg text-white">
-            {message}
+    <div className="min-h-screen bg-gray-50">
+      {/* 헤더 */}
+      <header className="bg-white shadow-sm border-b border-gray-200">
+        <div className="max-w-7xl mx-auto px-6 py-4">
+          <div className="flex items-center justify-between">
+            <h1 className="text-2xl font-bold text-gray-900">수요예측 대시보드</h1>
+            {mounted && (
+              <div className="text-sm text-gray-500">
+                현재 시간: {currentTime}
+              </div>
+            )}
           </div>
-        )}
-        
-        {chatResponse && (
-          <div className="mb-4 p-4 bg-purple-500 bg-opacity-20 rounded-lg text-white border border-purple-400 border-opacity-30">
-            <h4 className="font-bold mb-2">🤖 ChatGPT 응답:</h4>
-            <p className="whitespace-pre-wrap">{chatResponse}</p>
-          </div>
-        )}
-        
-        <div className="text-white text-opacity-70 animate-fade-in-up-delay-3">
-          현재 시간: {currentTime}
         </div>
-      </div>
+      </header>
 
-      <style jsx>{`
-        @keyframes fadeInUp {
-          from {
-            opacity: 0;
-            transform: translateY(30px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
+      {/* 메인 콘텐츠 */}
+      <main className="max-w-7xl mx-auto px-6 py-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          
+          {/* 좌측 패널: 설정 및 컨트롤 */}
+          <div className="lg:col-span-1 space-y-6">
+            
+            {/* 데이터 미리보기 카드 */}
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">📊 데이터 미리보기</h2>
+              <p className="text-sm text-gray-600 mb-4">소매점 재고 데이터를 확인하세요.</p>
+              <button
+                onClick={loadDataPreview}
+                disabled={isLoadingData}
+                className={`w-full px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                  isLoadingData 
+                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
+                    : 'bg-blue-600 text-white hover:bg-blue-700'
+                }`}
+              >
+                {isLoadingData ? '데이터 로딩 중...' : '데이터 미리보기'}
+              </button>
+            </div>
 
-        .animate-fade-in-up {
-          animation: fadeInUp 1s ease-out;
-        }
+            {/* 수요예측 설정 카드 */}
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">🔮 수요예측 설정</h2>
+              
+              {/* 타겟 컬럼 선택 */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">예측 타겟 컬럼</label>
+                <select
+                  value={targetColumn}
+                  onChange={(e) => setTargetColumn(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  <option value="">타겟 컬럼 선택</option>
+                  <option value="Units Sold">Units Sold (판매량)</option>
+                  <option value="Units Ordered">Units Ordered (주문량)</option>
+                  <option value="Demand Forecast">Demand Forecast (수요예측)</option>
+                  <option value="Inventory Level">Inventory Level (재고량)</option>
+                </select>
+              </div>
 
-        .animate-fade-in-up-delay {
-          animation: fadeInUp 1s ease-out 0.3s both;
-        }
+              {/* 피쳐 컬럼 다중 선택 */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">피쳐 컬럼 (다중 선택)</label>
+                <div className="max-h-40 overflow-y-auto border border-gray-300 rounded-md p-3 bg-gray-50">
+                  <div className="grid grid-cols-1 gap-2">
+                    {['Date', 'Store ID', 'Product ID', 'Category', 'Region', 'Price', 'Discount', 'Weather Condition', 'Holiday/Promotion', 'Competitor Pricing', 'Seasonality'].map((column) => (
+                      <label key={column} className="flex items-center text-sm">
+                        <input
+                          type="checkbox"
+                          checked={featureColumns.includes(column)}
+                          onChange={(e) => handleFeatureColumnChange(column, e.target.checked)}
+                          className="mr-2 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                        />
+                        <span className="text-gray-700">{column}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </div>
 
-        .animate-fade-in-up-delay-2 {
-          animation: fadeInUp 1s ease-out 0.6s both;
-        }
+              {/* 예측 기간 입력 */}
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-2">예측 기간 (일)</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="30"
+                  value={forecastDays}
+                  onChange={(e) => setForecastDays(Number(e.target.value))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="예: 7일"
+                />
+              </div>
 
-        .animate-fade-in-up-delay-3 {
-          animation: fadeInUp 1s ease-out 0.9s both;
-        }
-      `}</style>
+              {/* 예측 실행 버튼 */}
+              <button
+                onClick={runForecast}
+                disabled={isLoadingForecast}
+                className={`w-full px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                  isLoadingForecast 
+                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
+                    : 'bg-green-600 text-white hover:bg-green-700'
+                }`}
+              >
+                {isLoadingForecast ? '예측 실행 중...' : '🔮 수요예측 실행'}
+              </button>
+            </div>
+          </div>
+
+          {/* 우측 패널: 결과 표시 영역 */}
+          <div className="lg:col-span-2">
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 h-96">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">📈 예측 결과</h2>
+              <div className="flex items-center justify-center h-full text-gray-500">
+                <div className="text-center">
+                  <div className="text-4xl mb-4">📊</div>
+                  <p>수요예측을 실행하면 결과가 여기에 표시됩니다.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
+
+      {/* 데이터 미리보기 모달 */}
+      {showDataModal && csvData && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-6xl w-full max-h-[90vh] overflow-hidden">
+            <div className="p-6 border-b border-gray-200">
+              <div className="flex justify-between items-center">
+                <h2 className="text-xl font-semibold text-gray-900">📊 소매점 재고 데이터 미리보기</h2>
+                <button
+                  onClick={() => setShowDataModal(false)}
+                  className="text-gray-400 hover:text-gray-600 text-2xl"
+                >
+                  ×
+                </button>
+              </div>
+              <p className="text-sm text-gray-600 mt-2">{csvData.message}</p>
+            </div>
+            
+            <div className="overflow-auto max-h-[70vh] p-6">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-gray-50">
+                      {csvData.headers.map((header: string, index: number) => (
+                        <th key={index} className="px-3 py-2 text-left border border-gray-200 font-medium text-gray-900">
+                          {header}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {csvData.data.map((row: any, rowIndex: number) => (
+                      <tr key={rowIndex} className={rowIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                        {csvData.headers.map((header: string, colIndex: number) => (
+                          <td key={colIndex} className="px-3 py-2 border border-gray-200 text-gray-700">
+                            {row[header] || '-'}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            
+            <div className="p-6 border-t border-gray-200 bg-gray-50">
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-gray-600">총 {csvData.totalRows}개 행 중 {csvData.previewRows}개 행 표시</span>
+                <button
+                  onClick={() => setShowDataModal(false)}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                >
+                  닫기
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 수요예측 결과 모달 */}
+      {showForecastModal && forecastData && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-6xl w-full max-h-[90vh] overflow-hidden">
+            <div className="p-6 border-b border-gray-200">
+              <div className="flex justify-between items-center">
+                <h2 className="text-xl font-semibold text-gray-900">🔮 수요예측 결과</h2>
+                <button
+                  onClick={() => setShowForecastModal(false)}
+                  className="text-gray-400 hover:text-gray-600 text-2xl"
+                >
+                  ×
+                </button>
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-4">
+                <div className="bg-blue-50 p-4 rounded-lg">
+                  <h3 className="text-sm font-medium text-blue-900 mb-2">예측 설정</h3>
+                  <p className="text-sm text-blue-700">타겟: {forecastData.metadata.targetColumn}</p>
+                  <p className="text-sm text-blue-700">기간: {forecastData.metadata.forecastDays}일</p>
+                  <p className="text-sm text-blue-700">피쳐: {forecastData.metadata.featureColumns.length}개</p>
+                </div>
+                <div className="bg-green-50 p-4 rounded-lg">
+                  <h3 className="text-sm font-medium text-green-900 mb-2">데이터 통계</h3>
+                  <p className="text-sm text-green-700">평균: {forecastData.forecast.statistics.historical_mean}</p>
+                  <p className="text-sm text-green-700">최근 평균: {forecastData.forecast.statistics.recent_average}</p>
+                  <p className="text-sm text-green-700">트렌드: {forecastData.forecast.statistics.trend_per_day > 0 ? '+' : ''}{forecastData.forecast.statistics.trend_per_day}/일</p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="overflow-auto max-h-[60vh] p-6">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-gray-50">
+                      <th className="px-3 py-2 text-left border border-gray-200 font-medium">일자</th>
+                      <th className="px-3 py-2 text-left border border-gray-200 font-medium">예측값</th>
+                      <th className="px-3 py-2 text-left border border-gray-200 font-medium">신뢰구간 (하한)</th>
+                      <th className="px-3 py-2 text-left border border-gray-200 font-medium">신뢰구간 (상한)</th>
+                      <th className="px-3 py-2 text-left border border-gray-200 font-medium">신뢰도</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {forecastData.forecast.forecasts.map((forecast: any, index: number) => (
+                      <tr key={index} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                        <td className="px-3 py-2 border border-gray-200">{forecast.date}</td>
+                        <td className="px-3 py-2 border border-gray-200 font-semibold text-blue-600">{forecast.predicted_value}</td>
+                        <td className="px-3 py-2 border border-gray-200 text-gray-600">{forecast.confidence_lower}</td>
+                        <td className="px-3 py-2 border border-gray-200 text-gray-600">{forecast.confidence_upper}</td>
+                        <td className="px-3 py-2 border border-gray-200">
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                            forecast.confidence_level > 0.8 ? 'bg-green-100 text-green-800' :
+                            forecast.confidence_level > 0.6 ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-red-100 text-red-800'
+                          }`}>
+                            {Math.round(forecast.confidence_level * 100)}%
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            
+            <div className="p-6 border-t border-gray-200 bg-gray-50">
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-gray-600">알고리즘: {forecastData.metadata.algorithm}</span>
+                <button
+                  onClick={() => setShowForecastModal(false)}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                >
+                  닫기
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
