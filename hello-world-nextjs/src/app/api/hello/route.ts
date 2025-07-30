@@ -35,7 +35,7 @@ export async function POST(request: Request) {
       echo: body,
       processed: true
     })
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { error: 'API 처리 중 오류가 발생했습니다' },
       { status: 500 }

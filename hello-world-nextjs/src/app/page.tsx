@@ -39,7 +39,7 @@ export default function Home() {
       const response = await fetch('/api/hello')
       const data = await response.json()
       setMessage(data.message)
-    } catch (error) {
+    } catch {
       setMessage('API 호출 실패')
     }
   }
@@ -69,7 +69,7 @@ export default function Home() {
       } else {
         setChatResponse(`오류: ${data.error} - ${data.message}`)
       }
-    } catch (error) {
+    } catch {
       setChatResponse('ChatGPT API 호출 실패')
     } finally {
       setIsLoading(false)

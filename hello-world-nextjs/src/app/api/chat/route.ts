@@ -60,35 +60,43 @@ export async function POST(request: Request) {
       usage: completion.usage
     })
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('❌ ChatGPT API 오류:', error)
     
-    // API 키 관련 오류 처리
-    if (error?.error?.code === 'invalid_api_key') {
-      return NextResponse.json(
-        { 
-          error: 'OpenAI API 키가 유효하지 않습니다.',
-          message: 'API 키를 확인해주세요.'
-        },
-        { status: 401 }
-      )
+    // OpenAI API 에러 처리
+    const isOpenAIError = error && typeof error === 'object' && 'error' in error
+    
+    if (isOpenAIError) {
+      const openAIError = error as { error: { code?: string } }
+      
+      // API 키 관련 오류 처리
+      if (openAIError.error?.code === 'invalid_api_key') {
+        return NextResponse.json(
+          { 
+            error: 'OpenAI API 키가 유효하지 않습니다.',
+            message: 'API 키를 확인해주세요.'
+          },
+          { status: 401 }
+        )
+      }
+
+      // 할당량 초과 오류 처리
+      if (openAIError.error?.code === 'insufficient_quota') {
+        return NextResponse.json(
+          { 
+            error: 'OpenAI API 할당량이 초과되었습니다.',
+            message: '결제 정보를 확인해주세요.'
+          },
+          { status: 429 }
+        )
+      }
     }
 
-    // 할당량 초과 오류 처리
-    if (error?.error?.code === 'insufficient_quota') {
-      return NextResponse.json(
-        { 
-          error: 'OpenAI API 할당량이 초과되었습니다.',
-          message: '결제 정보를 확인해주세요.'
-        },
-        { status: 429 }
-      )
-    }
-
+    const errorMessage = error instanceof Error ? error.message : '알 수 없는 오류'
     return NextResponse.json(
       { 
         error: 'ChatGPT API 호출 중 오류가 발생했습니다.',
-        message: error.message || '알 수 없는 오류'
+        message: errorMessage
       },
       { status: 500 }
     )
