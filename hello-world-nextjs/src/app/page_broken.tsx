@@ -15,6 +15,7 @@ export default function Home() {
     message: string;
   } | null>(null)
   const [isLoadingData, setIsLoadingData] = useState(false)
+
   const [forecastData, setForecastData] = useState<{
     success: boolean;
     forecast: {
@@ -50,33 +51,41 @@ export default function Home() {
 
   useEffect(() => {
     setMounted(true)
+    
     const updateTime = () => {
       const now = new Date()
-      setCurrentTime(now.toLocaleString('ko-KR', {
+      const timeString = now.toLocaleString('ko-KR', {
         year: 'numeric',
         month: '2-digit',
         day: '2-digit',
         hour: '2-digit',
         minute: '2-digit',
         second: '2-digit'
-      }))
+      })
+      setCurrentTime(timeString)
     }
-    
+
     updateTime()
     const interval = setInterval(updateTime, 1000)
+
     return () => clearInterval(interval)
   }, [])
 
   const loadDataPreview = async () => {
     setIsLoadingData(true)
+    
     try {
       const response = await fetch('/api/data')
       const data = await response.json()
-      setCsvData(data)
-      setShowDataModal(true)
-    } catch (error) {
-      console.error('Data loading error:', error)
-      alert('데이터 로딩 중 오류가 발생했습니다.')
+      
+      if (data.success) {
+        setCsvData(data)
+        setShowDataModal(true)
+      } else {
+        alert(`데이터 로드 오류: ${data.error}`)
+      }
+    } catch {
+      alert('데이터를 불러오는 중 오류가 발생했습니다.')
     } finally {
       setIsLoadingData(false)
     }
@@ -116,8 +125,12 @@ export default function Home() {
     }
   }
 
-  if (!mounted) {
-    return null
+  const handleFeatureColumnChange = (column: string, checked: boolean) => {
+    if (checked) {
+      setFeatureColumns([...featureColumns, column])
+    } else {
+      setFeatureColumns(featureColumns.filter(col => col !== column))
+    }
   }
 
   return (
@@ -125,11 +138,13 @@ export default function Home() {
       {/* 헤더 */}
       <header className="bg-white shadow-sm border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-6 py-4">
-          <div className="flex justify-between items-center">
+          <div className="flex items-center justify-between">
             <h1 className="text-2xl font-bold text-gray-900">수요예측 대시보드</h1>
-            <div className="text-sm text-gray-600">
-              {currentTime}
-            </div>
+            {mounted && (
+              <div className="text-sm text-gray-500">
+                현재 시간: {currentTime}
+              </div>
+            )}
           </div>
         </div>
       </header>
@@ -154,7 +169,7 @@ export default function Home() {
                     : 'bg-blue-600 text-white hover:bg-blue-700'
                 }`}
               >
-                {isLoadingData ? '로딩 중...' : '데이터 미리보기'}
+                {isLoadingData ? '데이터 로딩 중...' : '데이터 미리보기'}
               </button>
             </div>
 
@@ -171,13 +186,14 @@ export default function Home() {
                   className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 >
                   <option value="">타겟 컬럼 선택</option>
-                  <option value="Units Sold">Units Sold</option>
-                  <option value="Units Ordered">Units Ordered</option>
-                  <option value="Price">Price</option>
+                  <option value="Units Sold">Units Sold (판매량)</option>
+                  <option value="Units Ordered">Units Ordered (주문량)</option>
+                  <option value="Demand Forecast">Demand Forecast (수요예측)</option>
+                  <option value="Inventory Level">Inventory Level (재고량)</option>
                 </select>
               </div>
 
-              {/* 피쳐 컬럼 선택 */}
+              {/* 피쳐 컬럼 다중 선택 */}
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   피쳐 컬럼 선택 (다중 선택 가능)
@@ -233,7 +249,6 @@ export default function Home() {
                   className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   placeholder="예: 7일"
                 />
-              </div>
 
               {/* 예측 실행 버튼 */}
               <button
@@ -341,9 +356,7 @@ export default function Home() {
                   ×
                 </button>
               </div>
-              <div className="mt-2 text-sm text-gray-600">
-                전체 {csvData.totalRows}행 중 {csvData.previewRows}행 미리보기
-              </div>
+              <p className="text-sm text-gray-600 mt-2">{csvData.message}</p>
             </div>
             
             <div className="overflow-auto max-h-[70vh] p-6">
@@ -352,7 +365,7 @@ export default function Home() {
                   <thead>
                     <tr className="bg-gray-50">
                       {csvData.headers.map((header: string, index: number) => (
-                        <th key={index} className="px-3 py-2 text-left border border-gray-200 font-medium">
+                        <th key={index} className="px-3 py-2 text-left border border-gray-200 font-medium text-gray-900">
                           {header}
                         </th>
                       ))}
@@ -374,7 +387,8 @@ export default function Home() {
             </div>
             
             <div className="p-6 border-t border-gray-200 bg-gray-50">
-              <div className="flex justify-end">
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-gray-600">총 {csvData.totalRows}개 행 중 {csvData.previewRows}개 행 표시</span>
                 <button
                   onClick={() => setShowDataModal(false)}
                   className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
@@ -386,6 +400,8 @@ export default function Home() {
           </div>
         </div>
       )}
+
+
     </div>
   )
 }
