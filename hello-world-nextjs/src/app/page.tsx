@@ -143,7 +143,7 @@ export default function Home() {
             
             {/* 데이터 미리보기 카드 */}
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">📊 데이터 미리보기</h2>
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">📊 데이터 불러오기</h2>
               <p className="text-sm text-gray-600 mb-4">소매점 재고 데이터를 확인하세요.</p>
               <button
                 onClick={loadDataPreview}
@@ -154,7 +154,7 @@ export default function Home() {
                     : 'bg-blue-600 text-white hover:bg-blue-700'
                 }`}
               >
-                {isLoadingData ? '로딩 중...' : '데이터 미리보기'}
+                {isLoadingData ? '로딩 중...' : '데이터 불러오기'}
               </button>
             </div>
 
