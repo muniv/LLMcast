@@ -6,10 +6,44 @@ export default function Home() {
   const [currentTime, setCurrentTime] = useState('')
   const [mounted, setMounted] = useState(false)
   const [showDataModal, setShowDataModal] = useState(false)
-  const [csvData, setCsvData] = useState<any>(null)
+  const [csvData, setCsvData] = useState<{
+    success: boolean;
+    headers: string[];
+    data: Record<string, string>[];
+    totalRows: number;
+    previewRows: number;
+    message: string;
+  } | null>(null)
   const [isLoadingData, setIsLoadingData] = useState(false)
   const [showForecastModal, setShowForecastModal] = useState(false)
-  const [forecastData, setForecastData] = useState<any>(null)
+  const [forecastData, setForecastData] = useState<{
+    success: boolean;
+    forecast: {
+      forecasts: Array<{
+        day: number;
+        date: string;
+        predicted_value: number;
+        confidence_lower: number;
+        confidence_upper: number;
+        confidence_level: number;
+      }>;
+      statistics: {
+        historical_mean: number;
+        historical_std: number;
+        recent_average: number;
+        trend_per_day: number;
+        data_points: number;
+        window_size: number;
+      };
+    };
+    metadata: {
+      targetColumn: string;
+      featureColumns: string[];
+      forecastDays: number;
+      dataRows: number;
+      algorithm: string;
+    };
+  } | null>(null)
   const [isLoadingForecast, setIsLoadingForecast] = useState(false)
   const [targetColumn, setTargetColumn] = useState('')
   const [featureColumns, setFeatureColumns] = useState<string[]>([])
@@ -263,7 +297,7 @@ export default function Home() {
                     </tr>
                   </thead>
                   <tbody>
-                    {csvData.data.map((row: any, rowIndex: number) => (
+                    {csvData.data.map((row: Record<string, string>, rowIndex: number) => (
                       <tr key={rowIndex} className={rowIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                         {csvData.headers.map((header: string, colIndex: number) => (
                           <td key={colIndex} className="px-3 py-2 border border-gray-200 text-gray-700">
@@ -335,7 +369,14 @@ export default function Home() {
                     </tr>
                   </thead>
                   <tbody>
-                    {forecastData.forecast.forecasts.map((forecast: any, index: number) => (
+                    {forecastData.forecast.forecasts.map((forecast: {
+                      day: number;
+                      date: string;
+                      predicted_value: number;
+                      confidence_lower: number;
+                      confidence_upper: number;
+                      confidence_level: number;
+                    }, index: number) => (
                       <tr key={index} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                         <td className="px-3 py-2 border border-gray-200">{forecast.date}</td>
                         <td className="px-3 py-2 border border-gray-200 font-semibold text-blue-600">{forecast.predicted_value}</td>
