@@ -69,7 +69,6 @@ export default function Home() {
   const [featureColumns, setFeatureColumns] = useState<string[]>([])
   const [forecastDays, setForecastDays] = useState(7)
   const [selectedModel, setSelectedModel] = useState('arima')
-  const [aggregationLevel, setAggregationLevel] = useState('total')
 
   useEffect(() => {
     setMounted(true)
@@ -123,7 +122,6 @@ export default function Home() {
           featureColumns,
           forecastDays,
           modelType: selectedModel,
-          aggregationLevel,
         }),
       })
 
@@ -246,69 +244,6 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* 집계 레벨 선택 */}
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">📊 집계 레벨</label>
-                <div className="grid grid-cols-2 gap-2">
-                  <label className="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
-                    <input
-                      type="radio"
-                      name="aggregationLevel"
-                      value="total"
-                      checked={aggregationLevel === 'total'}
-                      onChange={(e) => setAggregationLevel(e.target.value)}
-                      className="mr-2"
-                    />
-                    <div>
-                      <div className="font-medium text-sm">전체</div>
-                      <div className="text-xs text-gray-500">모든 점포+상품 합계</div>
-                    </div>
-                  </label>
-                  <label className="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
-                    <input
-                      type="radio"
-                      name="aggregationLevel"
-                      value="by-store"
-                      checked={aggregationLevel === 'by-store'}
-                      onChange={(e) => setAggregationLevel(e.target.value)}
-                      className="mr-2"
-                    />
-                    <div>
-                      <div className="font-medium text-sm">점포별</div>
-                      <div className="text-xs text-gray-500">Store ID별 집계</div>
-                    </div>
-                  </label>
-                  <label className="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
-                    <input
-                      type="radio"
-                      name="aggregationLevel"
-                      value="by-product"
-                      checked={aggregationLevel === 'by-product'}
-                      onChange={(e) => setAggregationLevel(e.target.value)}
-                      className="mr-2"
-                    />
-                    <div>
-                      <div className="font-medium text-sm">상품별</div>
-                      <div className="text-xs text-gray-500">Product별 집계</div>
-                    </div>
-                  </label>
-                  <label className="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
-                    <input
-                      type="radio"
-                      name="aggregationLevel"
-                      value="by-store-product"
-                      checked={aggregationLevel === 'by-store-product'}
-                      onChange={(e) => setAggregationLevel(e.target.value)}
-                      className="mr-2"
-                    />
-                    <div>
-                      <div className="font-medium text-sm">점포+상품별</div>
-                      <div className="text-xs text-gray-500">각 조합별 개별 예측</div>
-                    </div>
-                  </label>
-                </div>
-              </div>
-
               {/* 예측 모델 선택 */}
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-2">예측 모델</label>
@@ -386,10 +321,56 @@ export default function Home() {
                   
                   {/* 예측 결과: 테스트 및 미래 예측 */}
                   <div className="space-y-6">
-                    {/* 정확도 검증 결과 - 테이블만 */}
+                    {/* 정확도 검증 결과 테이블 */}
                     {forecastData.forecast.test_forecasts && forecastData.forecast.test_forecasts.length > 0 && (
                       <div>
                         <h4 className="text-md font-semibold text-gray-800 mb-3">🧪 정확도 검증 결과 (마지막 2주)</h4>
+                        
+                        {/* 정확도 요약 */}
+                        {forecastData.forecast.accuracy && (
+                          <div className="bg-blue-50 p-4 rounded-lg mb-4">
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                              <div className="text-center">
+                                <div className="text-xl font-bold text-blue-600">
+                                  {forecastData.forecast.accuracy.accuracy_percentage.toFixed(1)}%
+                                </div>
+                                <div className="text-sm text-gray-600">전체 정확도</div>
+                              </div>
+                              <div className="text-center">
+                                <div className="text-lg font-semibold text-green-600">
+                                  {forecastData.forecast.accuracy.mape.toFixed(1)}%
+                                </div>
+                                <div className="text-sm text-gray-600">MAPE (오차율)</div>
+                              </div>
+                              <div className="text-center">
+                                <div className="text-lg font-semibold text-purple-600">
+                                  {forecastData.forecast.accuracy.r2.toFixed(3)}
+                                </div>
+                                <div className="text-sm text-gray-600">R² (설명력)</div>
+                              </div>
+                              <div className="text-center">
+                                <div className="text-lg font-semibold text-orange-600">
+                                  {forecastData.forecast.accuracy.mae.toFixed(2)}
+                              </div>
+                              <div className="text-sm text-gray-600">MAE (평균절대오차)</div>
+                            </div>
+                            <div className="text-center">
+                              <div className="text-lg font-semibold text-red-600">
+                                {forecastData.forecast.accuracy.rmse.toFixed(2)}
+                              </div>
+                              <div className="text-sm text-gray-600">RMSE (평균제곱근오차)</div>
+                            </div>
+                            <div className="text-center">
+                              <div className="text-lg font-semibold text-gray-600">
+                                {forecastData.forecast.statistics.test_size}개
+                              </div>
+                              <div className="text-sm text-gray-600">검증 데이터</div>
+                            </div>
+                          </div>
+                        </div>
+                        )}
+                        
+                        {/* 테스트 데이터 상세 결과 테이블 */}
                         <div className="overflow-x-auto">
                           <table className="w-full text-sm border border-gray-200 rounded-lg">
                             <thead className="bg-gray-50">

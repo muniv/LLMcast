@@ -8,14 +8,93 @@ interface ForecastRequest {
   featureColumns: string[]
   forecastDays: number
   modelType?: string // 새로 추가: 모델 선택
+  aggregationLevel?: string // 새로 추가: 집계 레벨 선택
 }
 
 type DataRow = Record<string, string | number>
 
+// 집계 함수들
+function aggregateTotal(data: DataRow[], targetColumn: string): DataRow[] {
+  // 날짜별로 그룹핑하여 전체 합계 계산
+  const groupedByDate = data.reduce((acc, row) => {
+    const date = String(row.Date || '')
+    if (!acc[date]) {
+      acc[date] = { Date: date, [targetColumn]: 0 }
+    }
+    acc[date][targetColumn] = (Number(acc[date][targetColumn]) || 0) + (Number(row[targetColumn]) || 0)
+    return acc
+  }, {} as Record<string, DataRow>)
+  
+  return Object.values(groupedByDate).sort((a, b) => 
+    String(a.Date).localeCompare(String(b.Date))
+  )
+}
+
+function aggregateByStore(data: DataRow[], targetColumn: string): DataRow[] {
+  // Store ID별로 그룹핑하여 날짜별 합계 계산
+  const groupedByStoreDate = data.reduce((acc, row) => {
+    const storeId = String(row['Store ID'] || '')
+    const date = String(row.Date || '')
+    const key = `${storeId}_${date}`
+    
+    if (!acc[key]) {
+      acc[key] = { 
+        Date: date, 
+        'Store ID': storeId,
+        [targetColumn]: 0 
+      }
+    }
+    acc[key][targetColumn] = (Number(acc[key][targetColumn]) || 0) + (Number(row[targetColumn]) || 0)
+    return acc
+  }, {} as Record<string, DataRow>)
+  
+  return Object.values(groupedByStoreDate).sort((a, b) => {
+    const dateCompare = String(a.Date).localeCompare(String(b.Date))
+    if (dateCompare !== 0) return dateCompare
+    return String(a['Store ID']).localeCompare(String(b['Store ID']))
+  })
+}
+
+function aggregateByProduct(data: DataRow[], targetColumn: string): DataRow[] {
+  // Product별로 그룹핑하여 날짜별 합계 계산
+  const groupedByProductDate = data.reduce((acc, row) => {
+    const product = String(row.Product || '')
+    const date = String(row.Date || '')
+    const key = `${product}_${date}`
+    
+    if (!acc[key]) {
+      acc[key] = { 
+        Date: date, 
+        Product: product,
+        [targetColumn]: 0 
+      }
+    }
+    acc[key][targetColumn] = (Number(acc[key][targetColumn]) || 0) + (Number(row[targetColumn]) || 0)
+    return acc
+  }, {} as Record<string, DataRow>)
+  
+  return Object.values(groupedByProductDate).sort((a, b) => {
+    const dateCompare = String(a.Date).localeCompare(String(b.Date))
+    if (dateCompare !== 0) return dateCompare
+    return String(a.Product).localeCompare(String(b.Product))
+  })
+}
+
+function aggregateByStoreProduct(data: DataRow[], targetColumn: string): DataRow[] {
+  // Store ID + Product 조합별로 개별 데이터 유지 (집계 없음)
+  return data.sort((a, b) => {
+    const dateCompare = String(a.Date).localeCompare(String(b.Date))
+    if (dateCompare !== 0) return dateCompare
+    const storeCompare = String(a['Store ID']).localeCompare(String(b['Store ID']))
+    if (storeCompare !== 0) return storeCompare
+    return String(a.Product).localeCompare(String(b.Product))
+  })
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body: ForecastRequest = await request.json()
-    const { targetColumn, featureColumns, forecastDays } = body
+    const { targetColumn, featureColumns, forecastDays, modelType, aggregationLevel } = body
 
     // 입력 검증
     if (!targetColumn || !featureColumns || featureColumns.length === 0 || !forecastDays) {
@@ -68,7 +147,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 간단한 수요예측 알고리즘 (이동평균 + 트렌드 분석)
-    const forecastResult = performModularForecast(data, targetColumn, featureColumns, forecastDays, body.modelType || 'arima')
+    const forecastResult = performModularForecast(data, targetColumn, featureColumns, forecastDays, modelType || 'arima', aggregationLevel || 'total')
 
     return NextResponse.json({
       success: true,
@@ -99,10 +178,34 @@ function performModularForecast(
   targetColumn: string, 
   featureColumns: string[], 
   forecastDays: number,
-  modelType: string = 'arima'
+  modelType: string = 'arima',
+  aggregationLevel: string = 'total'
 ) {
+  // 집계 레벨에 따른 데이터 처리
+  let processedData: DataRow[]
+  
+  switch (aggregationLevel) {
+    case 'by-store':
+      // Store ID별로 그룹핑하여 집계
+      processedData = aggregateByStore(data, targetColumn)
+      break
+    case 'by-product':
+      // Product별로 그룹핑하여 집계
+      processedData = aggregateByProduct(data, targetColumn)
+      break
+    case 'by-store-product':
+      // Store ID + Product 조합별로 그룹핑
+      processedData = aggregateByStoreProduct(data, targetColumn)
+      break
+    case 'total':
+    default:
+      // 전체 합계 (기존 로직)
+      processedData = aggregateTotal(data, targetColumn)
+      break
+  }
+  
   // 대상 데이터 추출 및 정리
-  const targetData = data.map((row, index) => ({
+  const targetData = processedData.map((row, index) => ({
     value: Number(row[targetColumn]) || 0,
     index,
     date: String(row.Date || '')
@@ -112,8 +215,9 @@ function performModularForecast(
     throw new Error('예측을 위한 충분한 데이터가 없습니다. (최소 10개 필요)')
   }
   
-  // Train/Test 분할 (80/20)
-  const splitIndex = Math.floor(targetData.length * 0.8)
+  // Train/Test 분할 (마지막 2주를 테스트 데이터로)
+  const testDays = Math.min(14, Math.floor(targetData.length * 0.3)) // 최대 14일, 전체의 30% 이하
+  const splitIndex = targetData.length - testDays
   const trainData = targetData.slice(0, splitIndex)
   const testData = targetData.slice(splitIndex)
   

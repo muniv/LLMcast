@@ -38,16 +38,17 @@ export interface ForecastModel {
 
 // ARIMA 모델 구현 (간소화된 버전)
 export class ARIMAModel implements ForecastModel {
-  name = 'ARIMA';
   protected p: number; // AR order
   protected d: number; // Differencing order
   protected q: number; // MA order
-  private arParams: number[] = [];
-  private maParams: number[] = [];
-  private residuals: number[] = [];
-  private fittedValues: number[] = [];
-  private originalData: number[] = [];
-  private differencedData: number[] = [];
+  public name: string = 'ARIMA';
+  protected arParams: number[] = [];
+  protected maParams: number[] = [];
+  protected residuals: number[] = [];
+  protected fittedValues: number[] = [];
+  protected originalData: number[] = [];
+  protected differencedData: number[] = [];
+  protected lastOriginalValue: number = 0;
 
   constructor(p: number = 2, d: number = 1, q: number = 2) {
     this.p = p;
@@ -77,24 +78,35 @@ export class ARIMAModel implements ForecastModel {
     const lastResiduals = [...this.residuals.slice(-this.q)];
     
     for (let step = 1; step <= steps; step++) {
-      // AR 부분 계산
-      let arComponent = 0;
-      for (let i = 0; i < this.p && i < lastValues.length; i++) {
-        arComponent += this.arParams[i] * lastValues[lastValues.length - 1 - i];
+      // AR 항 계산
+      let arContribution = 0;
+      for (let j = 0; j < this.p; j++) {
+        if (j < lastValues.length) {
+          arContribution += this.arParams[j] * lastValues[lastValues.length - 1 - j];
+        }
       }
       
-      // MA 부분 계산
-      let maComponent = 0;
-      for (let i = 0; i < this.q && i < lastResiduals.length; i++) {
-        maComponent += this.maParams[i] * lastResiduals[lastResiduals.length - 1 - i];
+      // MA 항 계산
+      let maContribution = 0;
+      for (let j = 0; j < this.q; j++) {
+        if (j < lastResiduals.length) {
+          maContribution += this.maParams[j] * lastResiduals[lastResiduals.length - 1 - j];
+        }
       }
       
-      // 예측값 계산
-      const predictedDiff = arComponent + maComponent;
+      const predictedDiff = arContribution + maContribution;
+      this.lastOriginalValue = this.originalData[this.originalData.length - 1];
+      const predictedValue = Math.max(0, this.lastOriginalValue + predictedDiff);
       
-      // 차분 역변환
-      const lastOriginal = this.originalData[this.originalData.length - 1];
-      const predictedValue = Math.max(0, lastOriginal + predictedDiff);
+      // 디버깅 로그 추가
+      if (step <= 3) {
+        console.log(`🔮 ARIMA Prediction Step ${step}:`);
+        console.log('  AR contribution:', arContribution);
+        console.log('  MA contribution:', maContribution);
+        console.log('  Predicted diff:', predictedDiff);
+        console.log('  Last original value:', this.lastOriginalValue);
+        console.log('  Final predicted value:', predictedValue);
+      }
       
       // 신뢰구간 계산 (잔차 표준편차 기반)
       const residualStd = this.calculateStandardDeviation(this.residuals);
@@ -442,6 +454,11 @@ export class HoltWintersModel implements ForecastModel {
   private calculateAccuracyMetrics(actual: number[], predicted: number[]) {
     const n = Math.min(actual.length, predicted.length);
     if (n === 0) return { mae: 0, mse: 0, rmse: 0, mape: 0, r2: 0, accuracy_percentage: 0 };
+
+    // 디버깅 로그 추가
+    console.log('🔍 Accuracy Calculation Debug:');
+    console.log('Actual values:', actual.slice(0, 5), '... (total:', actual.length, ')');
+    console.log('Predicted values:', predicted.slice(0, 5), '... (total:', predicted.length, ')');
 
     let mae = 0, mse = 0, mape = 0;
 
