@@ -147,7 +147,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 간단한 수요예측 알고리즘 (이동평균 + 트렌드 분석)
-    const forecastResult = performModularForecast(data, targetColumn, featureColumns, forecastDays, modelType || 'arima', aggregationLevel || 'total')
+    const forecastResult = await performModularForecast(data, targetColumn, featureColumns, forecastDays, modelType || 'arima', aggregationLevel || 'total')
 
     return NextResponse.json({
       success: true,
@@ -173,7 +173,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-function performModularForecast(
+async function performModularForecast(
   data: DataRow[], 
   targetColumn: string, 
   featureColumns: string[], 
@@ -191,15 +191,15 @@ function performModularForecast(
       date: String(row.Date || '')
     })).filter(item => !isNaN(item.value) && item.value >= 0)
     
-    return performSingleForecast(targetData, forecastDays, modelType)
+    return await performSingleForecast(targetData, forecastDays, modelType)
   } else {
     // 그룹별 예측: 각 그룹마다 개별 예측 수행
-    return performGroupedForecast(data, targetColumn, aggregationLevel, forecastDays, modelType)
+    return await performGroupedForecast(data, targetColumn, aggregationLevel, forecastDays, modelType)
   }
 }
 
 // 단일 예측 (기존 로직)
-function performSingleForecast(
+async function performSingleForecast(
   targetData: Array<{value: number, index: number, date: string}>,
   forecastDays: number,
   modelType: string
@@ -230,11 +230,11 @@ function performSingleForecast(
     dates: trainData.map(item => item.date)
   }
   
-  model.fit(trainingData)
+  await model.fit(trainingData)
   
   // 1단계: 테스트 데이터로 정확도 검증
-  const testPredictions = model.predict(actualForecastDays)
-  const testForecasts = testPredictions.forecasts.map((forecast, index) => ({
+  const testPredictions = await model.predict(actualForecastDays)
+  const testForecasts = testPredictions.forecasts.map((forecast: any, index: any) => ({
     ...forecast,
     date: testData[index]?.date || getDateAfterDays(index + 1),
     actual_value: testValues[index] || 0,
@@ -244,8 +244,8 @@ function performSingleForecast(
   }))
   
   // 2단계: 실제 미래 예측
-  const futurePredictions = model.predict(forecastDays)
-  const futureForecasts = futurePredictions.forecasts.map((forecast, index) => ({
+  const futurePredictions = await model.predict(forecastDays)
+  const futureForecasts = futurePredictions.forecasts.map((forecast: any, index: any) => ({
     ...forecast,
     date: getDateAfterDays(index + 1) // 실제 오늘 날짜 기준 미래
   }))
@@ -282,7 +282,7 @@ function performSingleForecast(
 }
 
 // 그룹별 예측 (점포별, 상품별, 점포+상품별)
-function performGroupedForecast(
+async function performGroupedForecast(
   data: DataRow[],
   targetColumn: string,
   aggregationLevel: string,
@@ -364,7 +364,7 @@ function performGroupedForecast(
     
     if (targetData.length >= 10) {
       try {
-        const groupResult = performSingleForecast(targetData, forecastDays, modelType)
+        const groupResult = await performSingleForecast(targetData, forecastDays, modelType)
         
         // 그룹 정보를 결과에 추가
         // eslint-disable-next-line @typescript-eslint/no-explicit-any

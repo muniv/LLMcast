@@ -178,9 +178,9 @@ export default function Home() {
           {/* 좌측 패널: 설정 및 컨트롤 */}
           <div className="lg:col-span-1 space-y-6">
             
-            {/* 데이터 미리보기 카드 */}
+            {/* 데이터 확인하기 카드 */}
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">📊 데이터 불러오기</h2>
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">📊 데이터 확인하기</h2>
               <p className="text-sm text-gray-600 mb-4">소매점 재고 데이터를 확인하세요.</p>
               <button
                 onClick={loadDataPreview}
@@ -191,7 +191,7 @@ export default function Home() {
                     : 'bg-blue-600 text-white hover:bg-blue-700'
                 }`}
               >
-                {isLoadingData ? '로딩 중...' : '데이터 불러오기'}
+                {isLoadingData ? '로딩 중...' : '데이터 확인하기'}
               </button>
             </div>
 
@@ -210,7 +210,6 @@ export default function Home() {
                   <option value="">타겟 컬럼 선택</option>
                   <option value="Units Sold">Units Sold</option>
                   <option value="Units Ordered">Units Ordered</option>
-                  <option value="Demand Forecast">Demand Forecast</option>
                   <option value="Price">Price</option>
                   <option value="Inventory Level">Inventory Level</option>
                 </select>
@@ -273,7 +272,7 @@ export default function Home() {
                     />
                     <div>
                       <div className="font-medium text-sm">전체</div>
-                      <div className="text-xs text-gray-500">모든 점포+상품 합계</div>
+                      <div className="text-xs text-gray-500">통합 예측</div>
                     </div>
                   </label>
                   <label className="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
@@ -332,11 +331,13 @@ export default function Home() {
                   <option value="arima">ARIMA (자기회귀통합이동평균)</option>
                   <option value="sarima">SARIMA (계절성 ARIMA)</option>
                   <option value="holt-winters">Holt-Winters (지수평활법)</option>
+                  <option value="time-llm">Time-LLM</option>
                 </select>
                 <p className="text-xs text-gray-500 mt-1">
                   {selectedModel === 'arima' && '트렌드와 자기상관성을 고려한 기본 시계열 모델'}
                   {selectedModel === 'sarima' && '계절성 패턴을 포함한 고급 시계열 모델'}
                   {selectedModel === 'holt-winters' && '트렌드와 계절성을 동시에 고려하는 지수평활 모델'}
+                  {selectedModel === 'time-llm' && '시계열 데이터를 토큰화 → 프롬프트로 변환 → LLM 추론 → 예측결과 토큰 해석 → 시계열 값 도출'}
                 </p>
               </div>
 
@@ -677,7 +678,7 @@ export default function Home() {
           <div className="bg-white rounded-lg max-w-6xl w-full max-h-[90vh] overflow-hidden">
             <div className="p-6 border-b border-gray-200">
               <div className="flex justify-between items-center">
-                <h2 className="text-xl font-semibold text-gray-900">📊 소매점 재고 데이터 미리보기</h2>
+                <h2 className="text-xl font-semibold text-gray-900">📊 소매점 재고 데이터 확인하기</h2>
                 <button
                   onClick={() => setShowDataModal(false)}
                   className="text-gray-400 hover:text-gray-600 text-2xl"
