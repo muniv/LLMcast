@@ -123,7 +123,10 @@ export default function Home() {
       return
     }
 
+    // 예측 시작 시 기존 결과 지우기
+    setForecastData(null)
     setIsLoadingForecast(true)
+    
     try {
       const response = await fetch('/api/forecast', {
         method: 'POST',
@@ -299,6 +302,20 @@ export default function Home() {
                       className="mr-2"
                     />
                     <div>
+                      <div className="font-medium text-sm">Product ID별</div>
+                      <div className="text-xs text-gray-500">Product ID별 집계</div>
+                    </div>
+                  </label>
+                  <label className="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
+                    <input
+                      type="radio"
+                      name="aggregationLevel"
+                      value="by-category"
+                      checked={aggregationLevel === 'by-category'}
+                      onChange={(e) => setAggregationLevel(e.target.value)}
+                      className="mr-2"
+                    />
+                    <div>
                       <div className="font-medium text-sm">카테고리별</div>
                       <div className="text-xs text-gray-500">Category별 집계</div>
                     </div>
@@ -309,6 +326,20 @@ export default function Home() {
                       name="aggregationLevel"
                       value="by-store-product"
                       checked={aggregationLevel === 'by-store-product'}
+                      onChange={(e) => setAggregationLevel(e.target.value)}
+                      className="mr-2"
+                    />
+                    <div>
+                      <div className="font-medium text-sm">점포+Product ID별</div>
+                      <div className="text-xs text-gray-500">각 조합별 개별 예측</div>
+                    </div>
+                  </label>
+                  <label className="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
+                    <input
+                      type="radio"
+                      name="aggregationLevel"
+                      value="by-store-category"
+                      checked={aggregationLevel === 'by-store-category'}
                       onChange={(e) => setAggregationLevel(e.target.value)}
                       className="mr-2"
                     />
@@ -385,14 +416,45 @@ export default function Home() {
                       <h3 className="text-sm font-medium text-green-900 mb-2">데이터 분할</h3>
                       <p className="text-sm text-green-700">학습 데이터: {forecastData.forecast.statistics.train_size || 0}개</p>
                       <p className="text-sm text-green-700">테스트 데이터: {forecastData.forecast.statistics.test_size || 0}개</p>
-                      <p className="text-sm text-green-700">트렌드: {forecastData.forecast.statistics.trend_per_day > 0 ? '+' : ''}{forecastData.forecast.statistics.trend_per_day}/일</p>
                     </div>
                     {forecastData.forecast.accuracy && (
                       <div className="bg-purple-50 p-4 rounded-lg">
                         <h3 className="text-sm font-medium text-purple-900 mb-2">예측 정확도</h3>
-                        <p className="text-sm text-purple-700">정확도: {forecastData.forecast.accuracy.accuracy_percentage}%</p>
-                        <p className="text-sm text-purple-700">MAPE: {forecastData.forecast.accuracy.mape}%</p>
-                        <p className="text-sm text-purple-700">R²: {forecastData.forecast.accuracy.r2}</p>
+                        {(() => {
+                          // 단일 예측 결과인 경우
+                          if (forecastData.forecast.accuracy && forecastData.forecast.accuracy.accuracy_percentage !== undefined) {
+                            return (
+                              <>
+                                <p className="text-sm text-purple-700">정확도: {forecastData.forecast.accuracy.accuracy_percentage}%</p>
+                                <p className="text-sm text-purple-700">MAPE: {forecastData.forecast.accuracy.mape}%</p>
+                                <p className="text-sm text-purple-700">R²: {forecastData.forecast.accuracy.r2}</p>
+                              </>
+                            );
+                          }
+                          
+                          // 집계 레벨별 결과인 경우 - group_accuracies에서 정확도 추출
+                          if (forecastData.forecast.accuracy && (forecastData.forecast.accuracy as any).group_accuracies) {
+                            const groupAccuracies = (forecastData.forecast.accuracy as any).group_accuracies;
+                            const accuracyValues = Object.values(groupAccuracies) as any[];
+                            
+                            if (accuracyValues.length > 0 && accuracyValues[0].accuracy_percentage !== undefined) {
+                              const avgAccuracy = accuracyValues.reduce((sum: number, acc: any) => sum + acc.accuracy_percentage, 0) / accuracyValues.length;
+                              const avgMape = accuracyValues.reduce((sum: number, acc: any) => sum + acc.mape, 0) / accuracyValues.length;
+                              const avgR2 = accuracyValues.reduce((sum: number, acc: any) => sum + acc.r2, 0) / accuracyValues.length;
+                              
+                              return (
+                                <>
+                                  <p className="text-sm text-purple-700">평균 정확도: {avgAccuracy.toFixed(1)}%</p>
+                                  <p className="text-sm text-purple-700">평균 MAPE: {avgMape.toFixed(1)}%</p>
+                                  <p className="text-sm text-purple-700">평균 R²: {avgR2.toFixed(3)}</p>
+                                  <p className="text-xs text-purple-600 mt-1">({accuracyValues.length}개 그룹 평균)</p>
+                                </>
+                              );
+                            }
+                          }
+                          
+                          return <p className="text-sm text-purple-700">정확도 데이터 없음</p>;
+                        })()}
                       </div>
                     )}
                   </div>
@@ -454,8 +516,10 @@ export default function Home() {
                               <div key={groupName} className="border rounded-lg p-4">
                                 <h5 className="font-medium text-gray-800 mb-3">
                                   {aggregationLevel === 'by-store' && `🏢 점포: ${groupName}`}
-                                  {aggregationLevel === 'by-product' && `📋 카테고리: ${groupName}`}
-                                  {aggregationLevel === 'by-store-product' && `🏢📋 ${groupName.replace(',', ' - ')}`}
+                                  {aggregationLevel === 'by-product' && `🏷️ Product ID: ${groupName}`}
+                                  {aggregationLevel === 'by-category' && `📋 카테고리: ${groupName}`}
+                                  {aggregationLevel === 'by-store-product' && `🏢🏷️ ${groupName.replace(',', ' - ')}`}
+                                  {aggregationLevel === 'by-store-category' && `🏢📋 ${groupName.replace(',', ' - ')}`}
                                   <span className="ml-2 text-sm text-gray-500">
                                     (정확도: {groupData.accuracy?.accuracy_percentage?.toFixed(1) || 'N/A'}%)
                                   </span>
@@ -579,8 +643,10 @@ export default function Home() {
                               <div key={groupName} className="border rounded-lg p-3">
                                 <h5 className="font-medium text-gray-800 mb-2">
                                   {aggregationLevel === 'by-store' && `🏢 점포: ${groupName}`}
-                                  {aggregationLevel === 'by-product' && `📋 카테고리: ${groupName}`}
-                                  {aggregationLevel === 'by-store-product' && `🏢📋 ${groupName.replace(',', ' - ')}`}
+                                  {aggregationLevel === 'by-product' && `🏷️ Product ID: ${groupName}`}
+                                  {aggregationLevel === 'by-category' && `📋 카테고리: ${groupName}`}
+                                  {aggregationLevel === 'by-store-product' && `🏢🏷️ ${groupName.replace(',', ' - ')}`}
+                                  {aggregationLevel === 'by-store-category' && `🏢📋 ${groupName.replace(',', ' - ')}`}
                                 </h5>
                                 <div className="overflow-x-auto">
                                   <table className="w-full text-sm">

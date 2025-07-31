@@ -146,8 +146,17 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 간단한 수요예측 알고리즘 (이동평균 + 트렌드 분석)
-    const forecastResult = await performModularForecast(data, targetColumn, featureColumns, forecastDays, modelType || 'arima', aggregationLevel || 'total')
+    // 선택된 모델로 수요예측 수행
+    const selectedModel = modelType || 'arima';
+    const forecastResult = await performModularForecast(data, targetColumn, featureColumns, forecastDays, selectedModel, aggregationLevel || 'total')
+
+    // 모델 이름 매핑
+    const modelNames: { [key: string]: string } = {
+      'arima': 'ARIMA 모델',
+      'sarima': 'SARIMA 모델',
+      'holt-winters': 'Holt-Winters 모델',
+      'time-llm': 'Time-LLM'
+    };
 
     return NextResponse.json({
       success: true,
@@ -157,7 +166,7 @@ export async function POST(request: NextRequest) {
         featureColumns,
         forecastDays,
         dataRows: data.length,
-        algorithm: 'Moving Average with Trend Analysis'
+        algorithm: modelNames[selectedModel] || selectedModel
       }
     })
 
@@ -253,7 +262,7 @@ async function performSingleForecast(
   }))
   
   // 정확도 메트릭 계산
-  const accuracy = model.validateFit(testValues.slice(0, actualForecastDays))
+  const accuracy = await model.validateFit(testValues.slice(0, actualForecastDays))
   
   // 기본 통계 계산
   const mean = trainValues.reduce((sum, val) => sum + val, 0) / trainValues.length
@@ -298,9 +307,15 @@ async function performGroupedForecast(
       groupKey = 'Store ID'
       break
     case 'by-product':
+      groupKey = 'Product ID'
+      break
+    case 'by-category':
       groupKey = 'Category'
       break
     case 'by-store-product':
+      groupKey = 'Store ID,Product ID' // 조합 키
+      break
+    case 'by-store-category':
       groupKey = 'Store ID,Category' // 조합 키
       break
     default:
@@ -313,6 +328,8 @@ async function performGroupedForecast(
   data.forEach(row => {
     let groupValue: string
     if (aggregationLevel === 'by-store-product') {
+      groupValue = `${row['Store ID']},${row['Product ID']}`
+    } else if (aggregationLevel === 'by-store-category') {
       groupValue = `${row['Store ID']},${row['Category']}`
     } else {
       groupValue = String(row[groupKey] || '')
@@ -344,8 +361,13 @@ async function performGroupedForecast(
         if (aggregationLevel === 'by-store') {
           acc[date]['Store ID'] = row['Store ID']
         } else if (aggregationLevel === 'by-product') {
+          acc[date]['Product ID'] = row['Product ID']
+        } else if (aggregationLevel === 'by-category') {
           acc[date]['Category'] = row['Category']
         } else if (aggregationLevel === 'by-store-product') {
+          acc[date]['Store ID'] = row['Store ID']
+          acc[date]['Product ID'] = row['Product ID']
+        } else if (aggregationLevel === 'by-store-category') {
           acc[date]['Store ID'] = row['Store ID']
           acc[date]['Category'] = row['Category']
         }
@@ -361,8 +383,11 @@ async function performGroupedForecast(
         index,
         date: String(row.Date || ''),
         groupInfo: aggregationLevel === 'by-store' ? { storeId: row['Store ID'] } :
-                  aggregationLevel === 'by-product' ? { category: row['Category'] } :
-                  { storeId: row['Store ID'], category: row['Category'] }
+                  aggregationLevel === 'by-product' ? { productId: row['Product ID'] } :
+                  aggregationLevel === 'by-category' ? { category: row['Category'] } :
+                  aggregationLevel === 'by-store-product' ? { storeId: row['Store ID'], productId: row['Product ID'] } :
+                  aggregationLevel === 'by-store-category' ? { storeId: row['Store ID'], category: row['Category'] } :
+                  {}
       }))
       .filter(item => !isNaN(item.value) && item.value >= 0)
     
