@@ -572,7 +572,7 @@ export class TimeLLMModel implements ForecastModel {
     }
   }
 
-  validateFit(testData: number[]): {
+  validateFit(_testData: number[]): {
     mae: number;
     mse: number;
     rmse: number;
