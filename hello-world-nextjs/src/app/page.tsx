@@ -18,7 +18,18 @@ export default function Home() {
   const [forecastData, setForecastData] = useState<{
     success: boolean;
     forecast: {
-      forecasts: Array<{
+      test_forecasts: Array<{
+        day: number;
+        date: string;
+        predicted_value: number;
+        actual_value?: number;
+        confidence_lower: number;
+        confidence_upper: number;
+        confidence_level: number;
+        error?: number;
+        error_percentage?: number;
+      }>;
+      future_forecasts: Array<{
         day: number;
         date: string;
         predicted_value: number;
@@ -33,6 +44,16 @@ export default function Home() {
         trend_per_day: number;
         data_points: number;
         window_size: number;
+        train_size?: number;
+        test_size?: number;
+      };
+      accuracy?: {
+        mae: number;
+        mse: number;
+        rmse: number;
+        mape: number;
+        r2: number;
+        accuracy_percentage: number;
       };
     };
     metadata: {
@@ -253,61 +274,117 @@ export default function Home() {
               
               {forecastData ? (
                 <div className="space-y-6">
-                  {/* 예측 설정 및 통계 */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* 예측 설정, 통계 및 정확도 */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="bg-blue-50 p-4 rounded-lg">
                       <h3 className="text-sm font-medium text-blue-900 mb-2">예측 설정</h3>
                       <p className="text-sm text-blue-700">타겟: {forecastData.metadata.targetColumn}</p>
-                      <p className="text-sm text-blue-700">기간: {forecastData.metadata.forecastDays}일</p>
+                      <p className="text-sm text-blue-700">예측 기간: {forecastData.metadata.forecastDays}일</p>
                       <p className="text-sm text-blue-700">피쳐: {forecastData.metadata.featureColumns.length}개</p>
                     </div>
                     <div className="bg-green-50 p-4 rounded-lg">
-                      <h3 className="text-sm font-medium text-green-900 mb-2">데이터 통계</h3>
-                      <p className="text-sm text-green-700">평균: {forecastData.forecast.statistics.historical_mean}</p>
-                      <p className="text-sm text-green-700">최근 평균: {forecastData.forecast.statistics.recent_average}</p>
+                      <h3 className="text-sm font-medium text-green-900 mb-2">데이터 분할</h3>
+                      <p className="text-sm text-green-700">학습 데이터: {forecastData.forecast.statistics.train_size || 0}개</p>
+                      <p className="text-sm text-green-700">테스트 데이터: {forecastData.forecast.statistics.test_size || 0}개</p>
                       <p className="text-sm text-green-700">트렌드: {forecastData.forecast.statistics.trend_per_day > 0 ? '+' : ''}{forecastData.forecast.statistics.trend_per_day}/일</p>
                     </div>
+                    {forecastData.forecast.accuracy && (
+                      <div className="bg-purple-50 p-4 rounded-lg">
+                        <h3 className="text-sm font-medium text-purple-900 mb-2">예측 정확도</h3>
+                        <p className="text-sm text-purple-700">정확도: {forecastData.forecast.accuracy.accuracy_percentage}%</p>
+                        <p className="text-sm text-purple-700">MAPE: {forecastData.forecast.accuracy.mape}%</p>
+                        <p className="text-sm text-purple-700">R²: {forecastData.forecast.accuracy.r2}</p>
+                      </div>
+                    )}
                   </div>
                   
-                  {/* 예측 결과 테이블 */}
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="bg-gray-50">
-                          <th className="px-3 py-2 text-left border border-gray-200 font-medium">일자</th>
-                          <th className="px-3 py-2 text-left border border-gray-200 font-medium">예측값</th>
-                          <th className="px-3 py-2 text-left border border-gray-200 font-medium">신뢰구간 (하한)</th>
-                          <th className="px-3 py-2 text-left border border-gray-200 font-medium">신뢰구간 (상한)</th>
-                          <th className="px-3 py-2 text-left border border-gray-200 font-medium">신뢰도</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {forecastData.forecast.forecasts.map((forecast: {
-                          day: number;
-                          date: string;
-                          predicted_value: number;
-                          confidence_lower: number;
-                          confidence_upper: number;
-                          confidence_level: number;
-                        }, index: number) => (
-                          <tr key={index} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                            <td className="px-3 py-2 border border-gray-200">{forecast.date}</td>
-                            <td className="px-3 py-2 border border-gray-200 font-semibold text-blue-600">{forecast.predicted_value}</td>
-                            <td className="px-3 py-2 border border-gray-200 text-gray-600">{forecast.confidence_lower}</td>
-                            <td className="px-3 py-2 border border-gray-200 text-gray-600">{forecast.confidence_upper}</td>
-                            <td className="px-3 py-2 border border-gray-200">
-                              <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                forecast.confidence_level > 0.8 ? 'bg-green-100 text-green-800' :
-                                forecast.confidence_level > 0.6 ? 'bg-yellow-100 text-yellow-800' :
-                                'bg-red-100 text-red-800'
-                              }`}>
-                                {Math.round(forecast.confidence_level * 100)}%
-                              </span>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                  {/* 예측 결과: 테스트 및 미래 예측 */}
+                  <div className="space-y-6">
+                    {/* 정확도 검증 요약 */}
+                    {forecastData.forecast.accuracy && (
+                      <div>
+                        <h4 className="text-md font-semibold text-gray-800 mb-3">🧪 정확도 검증 결과</h4>
+                        <div className="bg-blue-50 p-4 rounded-lg">
+                          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                            <div className="text-center">
+                              <div className="text-2xl font-bold text-blue-600">
+                                {forecastData.forecast.accuracy.accuracy_percentage}%
+                              </div>
+                              <div className="text-sm text-gray-600">전체 정확도</div>
+                            </div>
+                            <div className="text-center">
+                              <div className="text-lg font-semibold text-green-600">
+                                {forecastData.forecast.accuracy.mape.toFixed(1)}%
+                              </div>
+                              <div className="text-sm text-gray-600">MAPE (오차율)</div>
+                            </div>
+                            <div className="text-center">
+                              <div className="text-lg font-semibold text-purple-600">
+                                {forecastData.forecast.accuracy.r2.toFixed(3)}
+                              </div>
+                              <div className="text-sm text-gray-600">R² (설명력)</div>
+                            </div>
+                            <div className="text-center">
+                              <div className="text-lg font-semibold text-orange-600">
+                                {forecastData.forecast.accuracy.mae.toFixed(2)}
+                              </div>
+                              <div className="text-sm text-gray-600">MAE (평균절대오차)</div>
+                            </div>
+                            <div className="text-center">
+                              <div className="text-lg font-semibold text-red-600">
+                                {forecastData.forecast.accuracy.rmse.toFixed(2)}
+                              </div>
+                              <div className="text-sm text-gray-600">RMSE (평균제곱근오차)</div>
+                            </div>
+                            <div className="text-center">
+                              <div className="text-lg font-semibold text-gray-600">
+                                {forecastData.forecast.statistics.test_size}개
+                              </div>
+                              <div className="text-sm text-gray-600">검증 데이터</div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* 미래 예측 결과 */}
+                    {forecastData.forecast.future_forecasts && forecastData.forecast.future_forecasts.length > 0 && (
+                      <div>
+                        <h4 className="text-md font-semibold text-gray-800 mb-3">🔮 미래 예측 결과 (실제 예측)</h4>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="bg-green-50">
+                                <th className="px-3 py-2 text-left border border-gray-200 font-medium">일자</th>
+                                <th className="px-3 py-2 text-left border border-gray-200 font-medium">예측값</th>
+                                <th className="px-3 py-2 text-left border border-gray-200 font-medium">신뢰구간</th>
+                                <th className="px-3 py-2 text-left border border-gray-200 font-medium">신뢰도</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {forecastData.forecast.future_forecasts.map((forecast, index) => (
+                                <tr key={index} className={index % 2 === 0 ? 'bg-white' : 'bg-green-25'}>
+                                  <td className="px-3 py-2 border border-gray-200">{forecast.date}</td>
+                                  <td className="px-3 py-2 border border-gray-200 font-semibold text-green-600">{forecast.predicted_value}</td>
+                                  <td className="px-3 py-2 border border-gray-200 text-gray-600">
+                                    {forecast.confidence_lower} ~ {forecast.confidence_upper}
+                                  </td>
+                                  <td className="px-3 py-2 border border-gray-200">
+                                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                      forecast.confidence_level > 0.8 ? 'bg-green-100 text-green-800' :
+                                      forecast.confidence_level > 0.6 ? 'bg-yellow-100 text-yellow-800' :
+                                      'bg-red-100 text-red-800'
+                                    }`}>
+                                      {Math.round(forecast.confidence_level * 100)}%
+                                    </span>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
                   </div>
                   
                   <div className="text-sm text-gray-600">

@@ -1,16 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import fs from 'fs'
 import path from 'path'
+import { ModelFactory, TrainingData, ForecastModel } from './models'
 
 interface ForecastRequest {
   targetColumn: string
   featureColumns: string[]
   forecastDays: number
+  modelType?: string // 새로 추가: 모델 선택
 }
 
-interface DataRow {
-  [key: string]: string | number
-}
+type DataRow = Record<string, string | number>
 
 export async function POST(request: NextRequest) {
   try {
@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 간단한 수요예측 알고리즘 (이동평균 + 트렌드 분석)
-    const forecastResult = performSimpleForecast(data, targetColumn, featureColumns, forecastDays)
+    const forecastResult = performModularForecast(data, targetColumn, featureColumns, forecastDays, body.modelType || 'arima')
 
     return NextResponse.json({
       success: true,
@@ -94,98 +94,93 @@ export async function POST(request: NextRequest) {
   }
 }
 
-function performSimpleForecast(
+function performModularForecast(
   data: DataRow[], 
   targetColumn: string, 
   featureColumns: string[], 
-  forecastDays: number
+  forecastDays: number,
+  modelType: string = 'arima'
 ) {
-  // 타겟 컬럼의 숫자 값만 추출
-  const targetValues = data
-    .map(row => Number(row[targetColumn]))
-    .filter(val => !isNaN(val))
-
-  if (targetValues.length === 0) {
-    throw new Error('타겟 컬럼에 유효한 숫자 데이터가 없습니다.')
+  // 대상 데이터 추출 및 정리
+  const targetData = data.map((row, index) => ({
+    value: Number(row[targetColumn]) || 0,
+    index,
+    date: String(row.Date || '')
+  })).filter(item => !isNaN(item.value) && item.value >= 0)
+  
+  if (targetData.length < 10) {
+    throw new Error('예측을 위한 충분한 데이터가 없습니다. (최소 10개 필요)')
   }
-
+  
+  // Train/Test 분할 (80/20)
+  const splitIndex = Math.floor(targetData.length * 0.8)
+  const trainData = targetData.slice(0, splitIndex)
+  const testData = targetData.slice(splitIndex)
+  
+  const trainValues = trainData.map(item => item.value)
+  const testValues = testData.map(item => item.value)
+  const actualForecastDays = Math.min(forecastDays, testData.length)
+  
+  // 모델 선택 및 생성
+  const model: ForecastModel = ModelFactory.createModel(modelType, {
+    seasonalPeriod: 7 // 주간 계절성
+  })
+  
+  // 모델 학습
+  const trainingData: TrainingData = {
+    values: trainValues,
+    dates: trainData.map(item => item.date)
+  }
+  
+  model.fit(trainingData)
+  
+  // 1단계: 테스트 데이터로 정확도 검증
+  const testPredictions = model.predict(actualForecastDays)
+  const testForecasts = testPredictions.forecasts.map((forecast, index) => ({
+    ...forecast,
+    date: testData[index]?.date || getDateAfterDays(index + 1),
+    actual_value: testValues[index] || 0,
+    error: Math.abs(forecast.predicted_value - (testValues[index] || 0)),
+    error_percentage: testValues[index] > 0 ? 
+      Math.abs((forecast.predicted_value - testValues[index]) / testValues[index]) * 100 : 0
+  }))
+  
+  // 2단계: 실제 미래 예측
+  const futurePredictions = model.predict(forecastDays)
+  const futureForecasts = futurePredictions.forecasts.map((forecast, index) => ({
+    ...forecast,
+    date: getDateAfterDays(index + 1) // 실제 오늘 날짜 기준 미래
+  }))
+  
+  // 정확도 메트릭 계산
+  const accuracy = model.validateFit(testValues.slice(0, actualForecastDays))
+  
   // 기본 통계 계산
-  const mean = targetValues.reduce((sum, val) => sum + val, 0) / targetValues.length
-  const variance = targetValues.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / targetValues.length
+  const mean = trainValues.reduce((sum, val) => sum + val, 0) / trainValues.length
+  const variance = trainValues.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / trainValues.length
   const stdDev = Math.sqrt(variance)
 
-  // 최근 N개 값의 이동평균 (N = 최소 3, 최대 10)
-  const windowSize = Math.min(Math.max(3, Math.floor(targetValues.length / 10)), 10)
-  const recentValues = targetValues.slice(-windowSize)
-  const movingAverage = recentValues.reduce((sum, val) => sum + val, 0) / recentValues.length
-
-  // 트렌드 계산 (최근 값들의 기울기)
-  let trend = 0
-  if (recentValues.length >= 2) {
-    const firstHalf = recentValues.slice(0, Math.floor(recentValues.length / 2))
-    const secondHalf = recentValues.slice(Math.floor(recentValues.length / 2))
-    const firstAvg = firstHalf.reduce((sum, val) => sum + val, 0) / firstHalf.length
-    const secondAvg = secondHalf.reduce((sum, val) => sum + val, 0) / secondHalf.length
-    trend = (secondAvg - firstAvg) / firstHalf.length
-  }
-
-  // 계절성 요인 (간단한 주기 패턴 감지)
-  const seasonalityFactor = detectSeasonality(targetValues)
-
-  // 예측 생성
-  const forecasts = []
-  for (let day = 1; day <= forecastDays; day++) {
-    // 기본 예측값 = 이동평균 + (트렌드 * 일수)
-    let forecastValue = movingAverage + (trend * day)
-    
-    // 계절성 적용
-    const seasonalAdjustment = seasonalityFactor * Math.sin((day / 7) * 2 * Math.PI) * 0.1
-    forecastValue += seasonalAdjustment * forecastValue
-    
-    // 불확실성 범위 (표준편차 기반)
-    const uncertainty = stdDev * Math.sqrt(day) * 0.5
-    
-    forecasts.push({
-      day: day,
-      date: getDateAfterDays(day),
-      predicted_value: Math.max(0, Math.round(forecastValue * 100) / 100),
-      confidence_lower: Math.max(0, Math.round((forecastValue - uncertainty) * 100) / 100),
-      confidence_upper: Math.round((forecastValue + uncertainty) * 100) / 100,
-      confidence_level: Math.max(0.6, Math.min(0.95, 1 - (day * 0.05))) // 시간이 지날수록 신뢰도 감소
-    })
-  }
-
   return {
-    forecasts,
+    test_forecasts: testForecasts,
+    future_forecasts: futureForecasts,
     statistics: {
+      ...testPredictions.statistics,
       historical_mean: Math.round(mean * 100) / 100,
       historical_std: Math.round(stdDev * 100) / 100,
-      recent_average: Math.round(movingAverage * 100) / 100,
-      trend_per_day: Math.round(trend * 100) / 100,
-      data_points: targetValues.length,
-      window_size: windowSize
+      data_points: trainData.length,
+      train_size: trainData.length,
+      test_size: testData.length,
+      algorithm: `${model.name} 모델`
+    },
+    accuracy: {
+      mae: Math.round(accuracy.mae * 100) / 100,
+      mse: Math.round(accuracy.mse * 100) / 100,
+      rmse: Math.round(accuracy.rmse * 100) / 100,
+      mape: Math.round(accuracy.mape * 100) / 100,
+      r2: Math.round(accuracy.r2 * 1000) / 1000,
+      accuracy_percentage: Math.round(accuracy.accuracy_percentage * 100) / 100
     }
   }
-}
-
-function detectSeasonality(values: number[]): number {
-  // 간단한 계절성 감지 (주간 패턴)
-  if (values.length < 14) return 0
-  
-  const weeklyPattern = []
-  for (let i = 0; i < 7; i++) {
-    const dayValues = values.filter((_, index) => index % 7 === i)
-    if (dayValues.length > 0) {
-      weeklyPattern.push(dayValues.reduce((sum, val) => sum + val, 0) / dayValues.length)
-    }
-  }
-  
-  if (weeklyPattern.length === 0) return 0
-  
-  const patternMean = weeklyPattern.reduce((sum, val) => sum + val, 0) / weeklyPattern.length
-  const variance = weeklyPattern.reduce((sum, val) => sum + Math.pow(val - patternMean, 2), 0) / weeklyPattern.length
-  
-  return Math.sqrt(variance) / patternMean // 변동계수
 }
 
 function getDateAfterDays(days: number): string {
@@ -193,3 +188,5 @@ function getDateAfterDays(days: number): string {
   const futureDate = new Date(today.getTime() + days * 24 * 60 * 60 * 1000)
   return futureDate.toISOString().split('T')[0]
 }
+
+
