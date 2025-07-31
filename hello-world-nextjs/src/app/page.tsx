@@ -70,6 +70,11 @@ export default function Home() {
   const [forecastDays, setForecastDays] = useState(7)
   const [selectedModel, setSelectedModel] = useState('arima')
   const [aggregationLevel, setAggregationLevel] = useState('total')
+  const [availableColumns, setAvailableColumns] = useState<string[]>([
+    'Date', 'Store ID', 'Product ID', 'Category', 'Region', 'Inventory Level',
+    'Units Sold', 'Units Ordered', 'Demand Forecast', 'Price', 'Discount',
+    'Weather Condition', 'Holiday/Promotion', 'Competitor Pricing', 'Seasonality'
+  ])
 
   useEffect(() => {
     setMounted(true)
@@ -96,6 +101,13 @@ export default function Home() {
       const response = await fetch('/api/data')
       const data = await response.json()
       setCsvData(data)
+      
+      // 실제 데이터에서 컬럼 추출하여 업데이트
+      if (data && data.length > 0) {
+        const actualColumns = Object.keys(data[0])
+        setAvailableColumns(actualColumns)
+      }
+      
       setShowDataModal(true)
     } catch (error) {
       console.error('Data loading error:', error)
@@ -198,7 +210,9 @@ export default function Home() {
                   <option value="">타겟 컬럼 선택</option>
                   <option value="Units Sold">Units Sold</option>
                   <option value="Units Ordered">Units Ordered</option>
+                  <option value="Demand Forecast">Demand Forecast</option>
                   <option value="Price">Price</option>
+                  <option value="Inventory Level">Inventory Level</option>
                 </select>
               </div>
 
@@ -207,25 +221,23 @@ export default function Home() {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   피쳐 컬럼 선택 (다중 선택 가능)
                 </label>
-                {csvData && (
-                  <div className="mb-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (featureColumns.length === csvData.headers.length) {
-                          setFeatureColumns([])
-                        } else {
-                          setFeatureColumns([...csvData.headers])
-                        }
-                      }}
-                      className="text-sm text-blue-600 hover:text-blue-800 font-medium"
-                    >
-                      {featureColumns.length === csvData.headers.length ? '모두 해제' : '모두 선택'}
-                    </button>
-                  </div>
-                )}
+                <div className="mb-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (featureColumns.length === availableColumns.length) {
+                        setFeatureColumns([])
+                      } else {
+                        setFeatureColumns([...availableColumns])
+                      }
+                    }}
+                    className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+                  >
+                    {featureColumns.length === availableColumns.length ? '모두 해제' : '모두 선택'}
+                  </button>
+                </div>
                 <div className="space-y-2 max-h-32 overflow-y-auto border border-gray-200 rounded-md p-2">
-                  {csvData && csvData.headers.map((header: string) => (
+                  {availableColumns.map((header: string) => (
                     <div key={header} className="flex items-center space-x-2">
                       <input
                         type="checkbox"
@@ -288,8 +300,8 @@ export default function Home() {
                       className="mr-2"
                     />
                     <div>
-                      <div className="font-medium text-sm">상품별</div>
-                      <div className="text-xs text-gray-500">Product별 집계</div>
+                      <div className="font-medium text-sm">카테고리별</div>
+                      <div className="text-xs text-gray-500">Category별 집계</div>
                     </div>
                   </label>
                   <label className="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
@@ -302,7 +314,7 @@ export default function Home() {
                       className="mr-2"
                     />
                     <div>
-                      <div className="font-medium text-sm">점포+상품별</div>
+                      <div className="font-medium text-sm">점포+카테고리별</div>
                       <div className="text-xs text-gray-500">각 조합별 개별 예측</div>
                     </div>
                   </label>
@@ -386,94 +398,258 @@ export default function Home() {
                   
                   {/* 예측 결과: 테스트 및 미래 예측 */}
                   <div className="space-y-6">
-                    {/* 정확도 검증 결과 - 테이블만 */}
+                    {/* 정확도 검증 결과 - 그룹별 또는 전체 */}
                     {forecastData.forecast.test_forecasts && forecastData.forecast.test_forecasts.length > 0 && (
                       <div>
-                        <h4 className="text-md font-semibold text-gray-800 mb-3">🧪 정확도 검증 결과 (마지막 2주)</h4>
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-sm border border-gray-200 rounded-lg">
-                            <thead className="bg-gray-50">
-                              <tr>
-                                <th className="px-3 py-2 text-left font-medium text-gray-700 border-b">날짜</th>
-                                <th className="px-3 py-2 text-right font-medium text-gray-700 border-b">실제값</th>
-                                <th className="px-3 py-2 text-right font-medium text-gray-700 border-b">예측값</th>
-                                <th className="px-3 py-2 text-right font-medium text-gray-700 border-b">오차</th>
-                                <th className="px-3 py-2 text-right font-medium text-gray-700 border-b">오차율</th>
-                                <th className="px-3 py-2 text-center font-medium text-gray-700 border-b">신뢰구간</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {forecastData.forecast.test_forecasts.map((item, index) => (
-                                <tr key={index} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                                  <td className="px-3 py-2 border-b text-gray-900">{item.date}</td>
-                                  <td className="px-3 py-2 border-b text-right font-medium">
-                                    {item.actual_value?.toFixed(1) || 'N/A'}
-                                  </td>
-                                  <td className="px-3 py-2 border-b text-right">
-                                    {item.predicted_value.toFixed(1)}
-                                  </td>
-                                  <td className="px-3 py-2 border-b text-right">
-                                    <span className={`${
-                                      (item.error || 0) > 0 ? 'text-red-600' : 'text-green-600'
-                                    }`}>
-                                      {item.error ? (item.error > 0 ? '+' : '') + item.error.toFixed(1) : 'N/A'}
-                                    </span>
-                                  </td>
-                                  <td className="px-3 py-2 border-b text-right">
-                                    <span className={`${
-                                      (item.error_percentage || 0) > 10 ? 'text-red-600' : 
-                                      (item.error_percentage || 0) > 5 ? 'text-orange-600' : 'text-green-600'
-                                    }`}>
-                                      {item.error_percentage ? item.error_percentage.toFixed(1) + '%' : 'N/A'}
-                                    </span>
-                                  </td>
-                                  <td className="px-3 py-2 border-b text-center text-xs text-gray-500">
-                                    [{item.confidence_lower.toFixed(1)}, {item.confidence_upper.toFixed(1)}]
-                                  </td>
+                        <h4 className="text-md font-semibold text-gray-800 mb-3">
+                          🧪 정확도 검증 결과 
+                          {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                          {(forecastData.forecast.statistics as any)?.group_count && (
+                            <span className="text-sm font-normal text-gray-600">
+                              {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                              ({(forecastData.forecast.statistics as any).group_count}개 그룹, 마지막 2주)
+                            </span>
+                          )}
+                          {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                          {!(forecastData.forecast.statistics as any)?.group_count && (
+                            <span className="text-sm font-normal text-gray-600">(마지막 2주)</span>
+                          )}
+                        </h4>
+                        
+                        {/* 그룹별 결과 표시 */}
+                        {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                        {(forecastData.forecast as any).groups ? (
+                          <div className="space-y-6">
+                            {/* 평균 그룹 정확도 표시 */}
+                            {(aggregationLevel === 'by-store' || aggregationLevel === 'by-product' || aggregationLevel === 'by-store-product') && (
+                              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-sm font-medium text-blue-800">
+                                    📊 평균 그룹 정확도
+                                  </span>
+                                  <span className="text-lg font-bold text-blue-900">
+                                    {(() => {
+                                      /* eslint-disable @typescript-eslint/no-explicit-any */
+                                      const groups = Object.values((forecastData.forecast as any).groups)
+                                      const validAccuracies = groups
+                                        .map((g: any) => g.accuracy?.accuracy_percentage)
+                                        .filter((acc: any) => acc != null && !isNaN(acc))
+                                      /* eslint-enable @typescript-eslint/no-explicit-any */
+                                      const avgAccuracy = validAccuracies.length > 0 
+                                        ? validAccuracies.reduce((sum: number, acc: number) => sum + acc, 0) / validAccuracies.length
+                                        : 0
+                                      return avgAccuracy.toFixed(1)
+                                    })()}%
+                                  </span>
+                                </div>
+                                <div className="text-xs text-blue-600 mt-1">
+                                  {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                                  {Object.keys((forecastData.forecast as any).groups).length}개 그룹의 평균 정확도
+                                </div>
+                              </div>
+                            )}
+                            {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                            {Object.entries((forecastData.forecast as any).groups).map(([groupName, groupData]: [string, any]) => (
+                              <div key={groupName} className="border rounded-lg p-4">
+                                <h5 className="font-medium text-gray-800 mb-3">
+                                  {aggregationLevel === 'by-store' && `🏢 점포: ${groupName}`}
+                                  {aggregationLevel === 'by-product' && `📋 카테고리: ${groupName}`}
+                                  {aggregationLevel === 'by-store-product' && `🏢📋 ${groupName.replace(',', ' - ')}`}
+                                  <span className="ml-2 text-sm text-gray-500">
+                                    (정확도: {groupData.accuracy?.accuracy_percentage?.toFixed(1) || 'N/A'}%)
+                                  </span>
+                                </h5>
+                                <div className="overflow-x-auto">
+                                  <table className="w-full text-sm border border-gray-200 rounded">
+                                    <thead className="bg-gray-50">
+                                      <tr>
+                                        <th className="px-2 py-1 text-left font-medium text-gray-700 border-b">날짜</th>
+                                        <th className="px-2 py-1 text-right font-medium text-gray-700 border-b">실제</th>
+                                        <th className="px-2 py-1 text-right font-medium text-gray-700 border-b">예측</th>
+                                        <th className="px-2 py-1 text-right font-medium text-gray-700 border-b">오차</th>
+                                        <th className="px-2 py-1 text-right font-medium text-gray-700 border-b">오차율</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                                      {groupData.test_forecasts?.map((item: any, index: number) => (
+                                        <tr key={index} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                                          <td className="px-2 py-1 border-b text-gray-900 text-xs">{item.date}</td>
+                                          <td className="px-2 py-1 border-b text-right font-medium text-xs">
+                                            {item.actual_value?.toFixed(1) || 'N/A'}
+                                          </td>
+                                          <td className="px-2 py-1 border-b text-right text-xs">
+                                            {item.predicted_value.toFixed(1)}
+                                          </td>
+                                          <td className="px-2 py-1 border-b text-right text-xs">
+                                            <span className={`${
+                                              (item.error || 0) > 0 ? 'text-red-600' : 'text-green-600'
+                                            }`}>
+                                              {item.error ? (item.error > 0 ? '+' : '') + item.error.toFixed(1) : 'N/A'}
+                                            </span>
+                                          </td>
+                                          <td className="px-2 py-1 border-b text-right text-xs">
+                                            <span className={`${
+                                              (item.error_percentage || 0) > 10 ? 'text-red-600' : 
+                                              (item.error_percentage || 0) > 5 ? 'text-orange-600' : 'text-green-600'
+                                            }`}>
+                                              {item.error_percentage ? item.error_percentage.toFixed(1) + '%' : 'N/A'}
+                                            </span>
+                                          </td>
+                                        </tr>
+                                      )) || []}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          /* 전체 집계 결과 (기존 테이블) */
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-sm border border-gray-200 rounded-lg">
+                              <thead className="bg-gray-50">
+                                <tr>
+                                  <th className="px-3 py-2 text-left font-medium text-gray-700 border-b">날짜</th>
+                                  <th className="px-3 py-2 text-right font-medium text-gray-700 border-b">실제값</th>
+                                  <th className="px-3 py-2 text-right font-medium text-gray-700 border-b">예측값</th>
+                                  <th className="px-3 py-2 text-right font-medium text-gray-700 border-b">오차</th>
+                                  <th className="px-3 py-2 text-right font-medium text-gray-700 border-b">오차율</th>
+                                  <th className="px-3 py-2 text-center font-medium text-gray-700 border-b">신뢰구간</th>
                                 </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
+                              </thead>
+                              <tbody>
+                                {forecastData.forecast.test_forecasts.map((item, index) => (
+                                  <tr key={index} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                                    <td className="px-3 py-2 border-b text-gray-900">{item.date}</td>
+                                    <td className="px-3 py-2 border-b text-right font-medium">
+                                      {item.actual_value?.toFixed(1) || 'N/A'}
+                                    </td>
+                                    <td className="px-3 py-2 border-b text-right">
+                                      {item.predicted_value.toFixed(1)}
+                                    </td>
+                                    <td className="px-3 py-2 border-b text-right">
+                                      <span className={`${
+                                        (item.error || 0) > 0 ? 'text-red-600' : 'text-green-600'
+                                      }`}>
+                                        {item.error ? (item.error > 0 ? '+' : '') + item.error.toFixed(1) : 'N/A'}
+                                      </span>
+                                    </td>
+                                    <td className="px-3 py-2 border-b text-right">
+                                      <span className={`${
+                                        (item.error_percentage || 0) > 10 ? 'text-red-600' : 
+                                        (item.error_percentage || 0) > 5 ? 'text-orange-600' : 'text-green-600'
+                                      }`}>
+                                        {item.error_percentage ? item.error_percentage.toFixed(1) + '%' : 'N/A'}
+                                      </span>
+                                    </td>
+                                    <td className="px-3 py-2 border-b text-center text-xs text-gray-500">
+                                      [{item.confidence_lower.toFixed(1)}, {item.confidence_upper.toFixed(1)}]
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
                       </div>
                     )}
                     
-                    {/* 미래 예측 결과 */}
+                    {/* 미래 예측 결과 - 그룹별 또는 전체 */}
                     {forecastData.forecast.future_forecasts && forecastData.forecast.future_forecasts.length > 0 && (
                       <div>
-                        <h4 className="text-md font-semibold text-gray-800 mb-3">🔮 미래 예측 결과 (실제 예측)</h4>
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-sm">
-                            <thead>
-                              <tr className="bg-green-50">
-                                <th className="px-3 py-2 text-left border border-gray-200 font-medium">일자</th>
-                                <th className="px-3 py-2 text-left border border-gray-200 font-medium">예측값</th>
-                                <th className="px-3 py-2 text-left border border-gray-200 font-medium">신뢰구간</th>
-                                <th className="px-3 py-2 text-left border border-gray-200 font-medium">신뢰도</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {forecastData.forecast.future_forecasts.map((forecast, index) => (
-                                <tr key={index} className={index % 2 === 0 ? 'bg-white' : 'bg-green-25'}>
-                                  <td className="px-3 py-2 border border-gray-200">{forecast.date}</td>
-                                  <td className="px-3 py-2 border border-gray-200 font-semibold text-green-600">{forecast.predicted_value}</td>
-                                  <td className="px-3 py-2 border border-gray-200 text-gray-600">
-                                    {forecast.confidence_lower} ~ {forecast.confidence_upper}
-                                  </td>
-                                  <td className="px-3 py-2 border border-gray-200">
-                                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                      forecast.confidence_level > 0.8 ? 'bg-green-100 text-green-800' :
-                                      forecast.confidence_level > 0.6 ? 'bg-yellow-100 text-yellow-800' :
-                                      'bg-red-100 text-red-800'
-                                    }`}>
-                                      {Math.round(forecast.confidence_level * 100)}%
-                                    </span>
-                                  </td>
+                        <h4 className="text-md font-semibold text-gray-800 mb-3">
+                          🔮 미래 예측 결과 (실제 예측)
+                          {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                          {(forecastData.forecast.statistics as any)?.group_count && (
+                            <span className="text-sm font-normal text-gray-600">
+                              {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                              ({(forecastData.forecast.statistics as any).group_count}개 그룹)
+                            </span>
+                          )}
+                        </h4>
+                        
+                        {/* 그룹별 미래 예측 결과 */}
+                        {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                        {(forecastData.forecast as any).groups ? (
+                          <div className="space-y-4">
+                            {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                            {Object.entries((forecastData.forecast as any).groups).map(([groupName, groupData]: [string, any]) => (
+                              <div key={groupName} className="border rounded-lg p-3">
+                                <h5 className="font-medium text-gray-800 mb-2">
+                                  {aggregationLevel === 'by-store' && `🏢 점포: ${groupName}`}
+                                  {aggregationLevel === 'by-product' && `📋 카테고리: ${groupName}`}
+                                  {aggregationLevel === 'by-store-product' && `🏢📋 ${groupName.replace(',', ' - ')}`}
+                                </h5>
+                                <div className="overflow-x-auto">
+                                  <table className="w-full text-sm">
+                                    <thead>
+                                      <tr className="bg-green-50">
+                                        <th className="px-2 py-1 text-left border border-gray-200 font-medium text-xs">일자</th>
+                                        <th className="px-2 py-1 text-left border border-gray-200 font-medium text-xs">예측값</th>
+                                        <th className="px-2 py-1 text-left border border-gray-200 font-medium text-xs">신뢰구간</th>
+                                        <th className="px-2 py-1 text-left border border-gray-200 font-medium text-xs">신뢰도</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                                      {groupData.future_forecasts?.map((forecast: any, index: number) => (
+                                        <tr key={index} className={index % 2 === 0 ? 'bg-white' : 'bg-green-25'}>
+                                          <td className="px-2 py-1 border border-gray-200 text-xs">{forecast.date}</td>
+                                          <td className="px-2 py-1 border border-gray-200 font-semibold text-green-600 text-xs">
+                                            {forecast.predicted_value.toFixed(1)}
+                                          </td>
+                                          <td className="px-2 py-1 border border-gray-200 text-gray-600 text-xs">
+                                            {forecast.confidence_lower.toFixed(1)} ~ {forecast.confidence_upper.toFixed(1)}
+                                          </td>
+                                          <td className="px-2 py-1 border border-gray-200 text-xs">
+                                            <span className="px-1 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                              {forecast.confidence_level}%
+                                            </span>
+                                          </td>
+                                        </tr>
+                                      )) || []}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          /* 전체 집계 미래 예측 결과 (기존 테이블) */
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-sm">
+                              <thead>
+                                <tr className="bg-green-50">
+                                  <th className="px-3 py-2 text-left border border-gray-200 font-medium">일자</th>
+                                  <th className="px-3 py-2 text-left border border-gray-200 font-medium">예측값</th>
+                                  <th className="px-3 py-2 text-left border border-gray-200 font-medium">신뢰구간</th>
+                                  <th className="px-3 py-2 text-left border border-gray-200 font-medium">신뢰도</th>
                                 </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
+                              </thead>
+                              <tbody>
+                                {forecastData.forecast.future_forecasts.map((forecast, index) => (
+                                  <tr key={index} className={index % 2 === 0 ? 'bg-white' : 'bg-green-25'}>
+                                    <td className="px-3 py-2 border border-gray-200">{forecast.date}</td>
+                                    <td className="px-3 py-2 border border-gray-200 font-semibold text-green-600">{forecast.predicted_value}</td>
+                                    <td className="px-3 py-2 border border-gray-200 text-gray-600">
+                                      {forecast.confidence_lower} ~ {forecast.confidence_upper}
+                                    </td>
+                                    <td className="px-3 py-2 border border-gray-200">
+                                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                        forecast.confidence_level > 0.8 ? 'bg-green-100 text-green-800' :
+                                        forecast.confidence_level > 0.6 ? 'bg-yellow-100 text-yellow-800' :
+                                        'bg-red-100 text-red-800'
+                                      }`}>
+                                        {Math.round(forecast.confidence_level * 100)}%
+                                      </span>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>

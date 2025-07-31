@@ -181,35 +181,29 @@ function performModularForecast(
   modelType: string = 'arima',
   aggregationLevel: string = 'total'
 ) {
-  // 집계 레벨에 따른 데이터 처리
-  let processedData: DataRow[]
-  
-  switch (aggregationLevel) {
-    case 'by-store':
-      // Store ID별로 그룹핑하여 집계
-      processedData = aggregateByStore(data, targetColumn)
-      break
-    case 'by-product':
-      // Product별로 그룹핑하여 집계
-      processedData = aggregateByProduct(data, targetColumn)
-      break
-    case 'by-store-product':
-      // Store ID + Product 조합별로 그룹핑
-      processedData = aggregateByStoreProduct(data, targetColumn)
-      break
-    case 'total':
-    default:
-      // 전체 합계 (기존 로직)
-      processedData = aggregateTotal(data, targetColumn)
-      break
+  // 집계 레벨에 따른 그룹별 예측 처리
+  if (aggregationLevel === 'total') {
+    // 기존 로직: 전체 합계로 단일 예측
+    const processedData = aggregateTotal(data, targetColumn)
+    const targetData = processedData.map((row, index) => ({
+      value: Number(row[targetColumn]) || 0,
+      index,
+      date: String(row.Date || '')
+    })).filter(item => !isNaN(item.value) && item.value >= 0)
+    
+    return performSingleForecast(targetData, forecastDays, modelType)
+  } else {
+    // 그룹별 예측: 각 그룹마다 개별 예측 수행
+    return performGroupedForecast(data, targetColumn, aggregationLevel, forecastDays, modelType)
   }
-  
-  // 대상 데이터 추출 및 정리
-  const targetData = processedData.map((row, index) => ({
-    value: Number(row[targetColumn]) || 0,
-    index,
-    date: String(row.Date || '')
-  })).filter(item => !isNaN(item.value) && item.value >= 0)
+}
+
+// 단일 예측 (기존 로직)
+function performSingleForecast(
+  targetData: Array<{value: number, index: number, date: string}>,
+  forecastDays: number,
+  modelType: string
+) {
   
   if (targetData.length < 10) {
     throw new Error('예측을 위한 충분한 데이터가 없습니다. (최소 10개 필요)')
@@ -283,6 +277,147 @@ function performModularForecast(
       mape: Math.round(accuracy.mape * 100) / 100,
       r2: Math.round(accuracy.r2 * 1000) / 1000,
       accuracy_percentage: Math.round(accuracy.accuracy_percentage * 100) / 100
+    }
+  }
+}
+
+// 그룹별 예측 (점포별, 상품별, 점포+상품별)
+function performGroupedForecast(
+  data: DataRow[],
+  targetColumn: string,
+  aggregationLevel: string,
+  forecastDays: number,
+  modelType: string
+) {
+  // 그룹 키 결정
+  let groupKey: string
+  switch (aggregationLevel) {
+    case 'by-store':
+      groupKey = 'Store ID'
+      break
+    case 'by-product':
+      groupKey = 'Category'
+      break
+    case 'by-store-product':
+      groupKey = 'Store ID,Category' // 조합 키
+      break
+    default:
+      throw new Error(`지원하지 않는 집계 레벨: ${aggregationLevel}`)
+  }
+  
+  // 데이터를 그룹별로 분류
+  const groups = new Map<string, DataRow[]>()
+  
+  data.forEach(row => {
+    let groupValue: string
+    if (aggregationLevel === 'by-store-product') {
+      groupValue = `${row['Store ID']},${row['Category']}`
+    } else {
+      groupValue = String(row[groupKey] || '')
+    }
+    
+    if (!groups.has(groupValue)) {
+      groups.set(groupValue, [])
+    }
+    groups.get(groupValue)!.push(row)
+  })
+  
+  // 각 그룹에 대해 개별 예측 수행
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const groupResults = new Map<string, any>()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const totalTestForecasts: any[] = []
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const totalFutureForecasts: any[] = []
+  
+  for (const [groupValue, groupData] of groups.entries()) {
+    // 그룹 데이터를 날짜별로 집계
+    const aggregatedData = groupData.reduce((acc, row) => {
+      const date = String(row.Date || '')
+      if (!acc[date]) {
+        acc[date] = { Date: date, [targetColumn]: 0 }
+        // 그룹 정보 보존
+        if (aggregationLevel === 'by-store') {
+          acc[date]['Store ID'] = row['Store ID']
+        } else if (aggregationLevel === 'by-product') {
+          acc[date]['Category'] = row['Category']
+        } else if (aggregationLevel === 'by-store-product') {
+          acc[date]['Store ID'] = row['Store ID']
+          acc[date]['Category'] = row['Category']
+        }
+      }
+      acc[date][targetColumn] = (Number(acc[date][targetColumn]) || 0) + (Number(row[targetColumn]) || 0)
+      return acc
+    }, {} as Record<string, DataRow>)
+    
+    const targetData = Object.values(aggregatedData)
+      .sort((a, b) => String(a.Date).localeCompare(String(b.Date)))
+      .map((row, index) => ({
+        value: Number(row[targetColumn]) || 0,
+        index,
+        date: String(row.Date || ''),
+        groupInfo: aggregationLevel === 'by-store' ? { storeId: row['Store ID'] } :
+                  aggregationLevel === 'by-product' ? { category: row['Category'] } :
+                  { storeId: row['Store ID'], category: row['Category'] }
+      }))
+      .filter(item => !isNaN(item.value) && item.value >= 0)
+    
+    if (targetData.length >= 10) {
+      try {
+        const groupResult = performSingleForecast(targetData, forecastDays, modelType)
+        
+        // 그룹 정보를 결과에 추가
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const enhancedTestForecasts = groupResult.test_forecasts.map((forecast: any) => ({
+          ...forecast,
+          group: groupValue,
+          groupInfo: targetData[0]?.groupInfo
+        }))
+        
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const enhancedFutureForecasts = groupResult.future_forecasts.map((forecast: any) => ({
+          ...forecast,
+          group: groupValue,
+          groupInfo: targetData[0]?.groupInfo
+        }))
+        
+        groupResults.set(groupValue, {
+          ...groupResult,
+          test_forecasts: enhancedTestForecasts,
+          future_forecasts: enhancedFutureForecasts,
+          group: groupValue
+        })
+        
+        totalTestForecasts.push(...enhancedTestForecasts)
+        totalFutureForecasts.push(...enhancedFutureForecasts)
+      } catch (error) {
+        console.warn(`그룹 ${groupValue} 예측 실패:`, error)
+      }
+    }
+  }
+  
+  // 전체 결과 집계
+  const totalDataPoints = Array.from(groupResults.values()).reduce((sum, result) => sum + result.statistics.data_points, 0)
+  const totalTrainSize = Array.from(groupResults.values()).reduce((sum, result) => sum + result.statistics.train_size, 0)
+  const totalTestSize = Array.from(groupResults.values()).reduce((sum, result) => sum + result.statistics.test_size, 0)
+  
+  return {
+    test_forecasts: totalTestForecasts,
+    future_forecasts: totalFutureForecasts,
+    groups: Object.fromEntries(groupResults),
+    statistics: {
+      data_points: totalDataPoints,
+      train_size: totalTrainSize,
+      test_size: totalTestSize,
+      group_count: groupResults.size,
+      algorithm: `${modelType.toUpperCase()} 모델 (그룹별)`,
+      aggregation_level: aggregationLevel
+    },
+    accuracy: {
+      // 그룹별 정확도는 개별로 계산됨
+      group_accuracies: Object.fromEntries(
+        Array.from(groupResults.entries()).map(([group, result]) => [group, result.accuracy])
+      )
     }
   }
 }
