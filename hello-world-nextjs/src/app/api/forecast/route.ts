@@ -234,7 +234,8 @@ async function performSingleForecast(
   
   // 1단계: 테스트 데이터로 정확도 검증
   const testPredictions = await model.predict(actualForecastDays)
-  const testForecasts = testPredictions.forecasts.map((forecast: any, index: any) => ({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const testForecasts = testPredictions.forecasts.map((forecast: any, index: number) => ({
     ...forecast,
     date: testData[index]?.date || getDateAfterDays(index + 1),
     actual_value: testValues[index] || 0,
@@ -245,7 +246,8 @@ async function performSingleForecast(
   
   // 2단계: 실제 미래 예측
   const futurePredictions = await model.predict(forecastDays)
-  const futureForecasts = futurePredictions.forecasts.map((forecast: any, index: any) => ({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const futureForecasts = futurePredictions.forecasts.map((forecast: any, index: number) => ({
     ...forecast,
     date: getDateAfterDays(index + 1) // 실제 오늘 날짜 기준 미래
   }))
@@ -326,7 +328,9 @@ async function performGroupedForecast(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const groupResults = new Map<string, any>()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const totalTestForecasts: any[] = []
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const totalFutureForecasts: any[] = []
   
@@ -368,12 +372,14 @@ async function performGroupedForecast(
         
         // 그룹 정보를 결과에 추가
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const enhancedTestForecasts = groupResult.test_forecasts.map((forecast: any) => ({
           ...forecast,
           group: groupValue,
           groupInfo: targetData[0]?.groupInfo
         }))
         
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const enhancedFutureForecasts = groupResult.future_forecasts.map((forecast: any) => ({
           ...forecast,
