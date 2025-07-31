@@ -433,14 +433,20 @@ export default function Home() {
                           }
                           
                           // 집계 레벨별 결과인 경우 - group_accuracies에서 정확도 추출
+                          // eslint-disable-next-line @typescript-eslint/no-explicit-any
                           if (forecastData.forecast.accuracy && (forecastData.forecast.accuracy as any).group_accuracies) {
+                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
                             const groupAccuracies = (forecastData.forecast.accuracy as any).group_accuracies;
-                            const accuracyValues = Object.values(groupAccuracies) as any[];
+                            const accuracyValues = Object.values(groupAccuracies) as Array<{
+                              accuracy_percentage: number;
+                              mape: number;
+                              r2: number;
+                            }>;
                             
                             if (accuracyValues.length > 0 && accuracyValues[0].accuracy_percentage !== undefined) {
-                              const avgAccuracy = accuracyValues.reduce((sum: number, acc: any) => sum + acc.accuracy_percentage, 0) / accuracyValues.length;
-                              const avgMape = accuracyValues.reduce((sum: number, acc: any) => sum + acc.mape, 0) / accuracyValues.length;
-                              const avgR2 = accuracyValues.reduce((sum: number, acc: any) => sum + acc.r2, 0) / accuracyValues.length;
+                              const avgAccuracy = accuracyValues.reduce((sum: number, acc) => sum + acc.accuracy_percentage, 0) / accuracyValues.length;
+                              const avgMape = accuracyValues.reduce((sum: number, acc) => sum + acc.mape, 0) / accuracyValues.length;
+                              const avgR2 = accuracyValues.reduce((sum: number, acc) => sum + acc.r2, 0) / accuracyValues.length;
                               
                               return (
                                 <>

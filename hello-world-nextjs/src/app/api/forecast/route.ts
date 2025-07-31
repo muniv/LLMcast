@@ -29,7 +29,6 @@ function aggregateTotal(data: DataRow[], targetColumn: string): DataRow[] {
     String(a.Date).localeCompare(String(b.Date))
   )
 }
-
 function aggregateByStore(data: DataRow[], targetColumn: string): DataRow[] {
   // Store ID별로 그룹핑하여 날짜별 합계 계산
   const groupedByStoreDate = data.reduce((acc, row) => {
@@ -80,7 +79,7 @@ function aggregateByProduct(data: DataRow[], targetColumn: string): DataRow[] {
   })
 }
 
-function aggregateByStoreProduct(data: DataRow[], targetColumn: string): DataRow[] {
+function aggregateByStoreProduct(data: DataRow[]): DataRow[] {
   // Store ID + Product 조합별로 개별 데이터 유지 (집계 없음)
   return data.sort((a, b) => {
     const dateCompare = String(a.Date).localeCompare(String(b.Date))
@@ -194,11 +193,11 @@ async function performModularForecast(
   if (aggregationLevel === 'total') {
     // 기존 로직: 전체 합계로 단일 예측
     const processedData = aggregateTotal(data, targetColumn)
-    const targetData = processedData.map((row, index) => ({
+    const targetData = processedData.map((row: DataRow, index: number) => ({
       value: Number(row[targetColumn]) || 0,
       index,
       date: String(row.Date || '')
-    })).filter(item => !isNaN(item.value) && item.value >= 0)
+    })).filter((item: { value: number; index: number; date: string }) => !isNaN(item.value) && item.value >= 0)
     
     return await performSingleForecast(targetData, forecastDays, modelType)
   } else {
@@ -345,9 +344,7 @@ async function performGroupedForecast(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const groupResults = new Map<string, any>()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const totalTestForecasts: any[] = []
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const totalFutureForecasts: any[] = []
   
@@ -397,14 +394,12 @@ async function performGroupedForecast(
         
         // 그룹 정보를 결과에 추가
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const enhancedTestForecasts = groupResult.test_forecasts.map((forecast: any) => ({
           ...forecast,
           group: groupValue,
           groupInfo: targetData[0]?.groupInfo
         }))
         
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const enhancedFutureForecasts = groupResult.future_forecasts.map((forecast: any) => ({
           ...forecast,
